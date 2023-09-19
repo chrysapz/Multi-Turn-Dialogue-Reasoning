@@ -22,6 +22,7 @@ def load_all_samples(base_dir,mode):
 def load_sample_from_file(filename):
     with open(filename, 'r') as file:
         data = json.loads(file.read())
+        data['answers'] = answer_mapping[data['answers']]
     return data['answers'], data['options'], data['article']
 
 
@@ -58,9 +59,12 @@ def create_dataset(base_dir, split, tokenizer, max_seq_length):
 
 def main(base_dir, tokenizer_name,  max_seq_length, debug):
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
-
+    print("Creating training set...")
     train_dataset = create_dataset(base_dir, 'train', tokenizer, max_seq_length)
+    print("DONE")
+    print("Creating validation set...")
     val_dataset = create_dataset(base_dir, 'dev', tokenizer, max_seq_length)
+    print("DONE")
     # test_dataset = create_dataset(base_dir, 'test', tokenizer, max_seq_length) # maybe useless since we don't have the labels
 
 #This is helpful right now. Later on it will be moved to the training script
