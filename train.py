@@ -1,7 +1,8 @@
 import torch
-from transformers import RobertaForMultipleChoice, AdamW, AutoTokenizer, AutoModelForMultipleChoice
+from transformers import AutoModelForSequenceClassification, AdamW, AutoTokenizer, AutoModelForMultipleChoice, DataCollatorWithPadding
 from torch.utils.data import DataLoader
 from data import create_dataset
+
 
 def train(model, train_loader, optimizer, device):
     optimizer.zero_grad()
@@ -11,9 +12,7 @@ def train(model, train_loader, optimizer, device):
     for batch in train_loader:
         optimizer.zero_grad()
 
-        inputs = {'input_ids': batch[0],
-                  'attention_mask': batch[1],
-                  'labels': batch[2]}
+        inputs = {key: value.to(device) for key, value in batch.items()}
         outputs = model(**inputs)
         loss = outputs[0]
 
@@ -27,20 +26,21 @@ def train(model, train_loader, optimizer, device):
 
 def main():
     base_dir = "data/mutual"
-    tokenizer_name = 'roberta-large'
+    tokenizer_name = 'roberta-base' # debug
+    model_name = 'roberta-base' # debug
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
     max_seq_length = 256
-    batch_size = 16
+    batch_size = 2 # debug
     learning_rate = 2e-5
     epochs = 3
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     train_dataset = create_dataset(base_dir, 'train', tokenizer, max_seq_length)
-    train_loader = DataLoader(train_dataset, shuffle=True, batch_size=batch_size)
-
+    collate_fn = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
+    train_loader = DataLoader(train_dataset, shuffle=True, batch_size=batch_size, collate_fn = collate_fn)
     num_labels = 2  
-    model = AutoModelForMultipleChoice.from_pretrained(tokenizer_name, num_labels=num_labels)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels = num_labels)
     model = model.to(device)
 
     optimizer = AdamW(model.parameters(), lr=learning_rate)

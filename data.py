@@ -26,7 +26,7 @@ def load_sample_from_file(filename):
     return data['answers'], data['options'], data['article']
 
 
-def tokenize_bert_data(data, tokenizer, max_seq_length):
+def tokenize_roberta_data(data, tokenizer, max_seq_length):
     """
     We feed into BERT:
         history, option_1 -> BERT
@@ -53,7 +53,7 @@ def tokenize_bert_data(data, tokenizer, max_seq_length):
 
 def create_dataset(base_dir, split, tokenizer, max_seq_length):
     split_samples = load_all_samples(base_dir, split)
-    tokenized_input_ids, tokenized_attention_mask, option_flags = tokenize_bert_data(split_samples, tokenizer, max_seq_length)
+    tokenized_input_ids, tokenized_attention_mask, option_flags = tokenize_roberta_data(split_samples, tokenizer, max_seq_length)
     dataset = MutualDataset(tokenized_input_ids, tokenized_attention_mask, option_flags)
     return dataset
 
@@ -69,7 +69,7 @@ def main(base_dir, tokenizer_name,  max_seq_length, debug):
 
 #This is helpful right now. Later on it will be moved to the training script
 if __name__=='__main__':
-    # todo add parser maybe?
+    # todo add parser with json maybe?
     base_dir = os.path.join("data","mutual")
     tokenizer_name = 'roberta-large'
     max_seq_length = 256
