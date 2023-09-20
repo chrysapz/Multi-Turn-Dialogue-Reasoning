@@ -1,56 +1,122 @@
+import os
 import torch
+import numpy as np
+import json
 from transformers import AutoModelForSequenceClassification, AdamW, AutoTokenizer, AutoModelForMultipleChoice, DataCollatorWithPadding
 from torch.utils.data import DataLoader
 from data import create_dataset
+from evaluate import evaluate, calculate_probs
+
+def set_seed(seed):
+    """
+    Function for setting the seed for reproducibility.
+    """
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
-def train(model, train_loader, optimizer, device):
-    optimizer.zero_grad()
-    model.train()
-    total_loss = 0.0
+def train(model, train_dataset, dev_dataset, config, tokenizer, device):
+    collate_fn = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
+    train_loader = DataLoader(train_dataset, shuffle=True, batch_size=config['batch_size'], collate_fn = collate_fn)
+ 
+    # common trick applied also in the paper https://github.com/Nealcly/MuTual/blob/master/baseline/multi-choice/run_multiple_choice.py#L101
+    no_decay = ['bias', 'LayerNorm.weight']
+    optimizer_grouped_parameters = [
+        {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+         'weight_decay':config['weight_decay']},
+        {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+    ]
+    #! they pass epsilon as an argument in their code. Maybe we can tune it at a later stage if our results deviate from theirs.
+    optimizer = AdamW(optimizer_grouped_parameters, lr=config['learning_rate'], eps=config['adam_epsilon'])
 
-    for batch in train_loader:
-        optimizer.zero_grad()
+    epochs = config['epochs']
 
-        inputs = {key: value.to(device) for key, value in batch.items()}
-        outputs = model(**inputs)
-        loss = outputs[0]
+    epoch_loss = []
+    all_epochs_preds = []
+    all_epochs_labels = []
+    for epoch in range(epochs):
+        model.train()
+        total_loss = 0.0
 
-        loss.backward()
-        optimizer.step()
+        cur_epoch_preds = []
+        cur_epoch_labels = []
 
-        total_loss += loss.item()
+        for batch in train_loader:
+            optimizer.zero_grad()
 
-    avg_loss = total_loss / len(train_loader)
-    return avg_loss
+            inputs = {key: value.to(device) for key, value in batch.items()}
+            outputs = model(**inputs)
+            loss = outputs[0]
 
-def main():
-    base_dir = "data/mutual"
-    tokenizer_name = 'roberta-base' # debug
-    model_name = 'roberta-base' # debug
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
-    max_seq_length = 256
-    batch_size = 2 # debug
-    learning_rate = 2e-5
-    epochs = 3
+            loss.backward()
+            optimizer.step()
+
+            total_loss += loss.item()
+            cur_epoch_preds.append(outputs.logits.cpu().detach())
+            cur_epoch_labels.append(batch['labels'].cpu().detach())
+
+            # break #! todo remove this
+        
+        # Concatenate training predictions and training labels
+        cur_epoch_preds = torch.cat(cur_epoch_preds, dim=0)
+        cur_epoch_labels = torch.cat(cur_epoch_labels, dim=0)
+        all_epochs_preds.append(cur_epoch_preds)
+        all_epochs_labels.append(cur_epoch_labels)
+
+        avg_train_loss = total_loss / len(train_loader)
+        epoch_loss.append(avg_train_loss)
+        print(f"Epoch {epoch+1}/{epochs} | Training Loss: {avg_train_loss:.3f}")
+
+        eval_preds, eval_labels, eval_loss = evaluate(model, dev_dataset, config, tokenizer, device)
+        #todo add proper function for calculating metrics
+        #todo apply early stopping
+        
+    return model, epoch_loss, all_epochs_preds, all_epochs_labels
+
+def get_checkpoint_name(config):
+    config_name =  f"{config['dataset_name']}_{config['model_name']}"
+    return config_name
+
+def main(config):
+    print('Training')
+    print(config)
+    base_dir = os.path.join(config['data_dir'], config['dataset_name'])
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    set_seed(config['seed'])
 
-    train_dataset = create_dataset(base_dir, 'train', tokenizer, max_seq_length)
-    collate_fn = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
-    train_loader = DataLoader(train_dataset, shuffle=True, batch_size=batch_size, collate_fn = collate_fn)
-    num_labels = 2  
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels = num_labels)
+    tokenizer = AutoTokenizer.from_pretrained(config['tokenizer_name'])
+    train_dataset = create_dataset(base_dir, 'train', tokenizer, config['max_seq_length'])
+    dev_dataset = create_dataset(base_dir, 'dev', tokenizer, config['max_seq_length'])
+
+    # create the model
+    model = AutoModelForSequenceClassification.from_pretrained(config['model_name'], num_labels = 2)
     model = model.to(device)
 
-    optimizer = AdamW(model.parameters(), lr=learning_rate)
+    model, avg_loss, all_epochs_preds, all_epochs_labels = train(model, train_dataset, dev_dataset, config, tokenizer, device)
 
-    for epoch in range(epochs):
-        avg_loss = train(model, train_loader, optimizer, device)
-        print(f"Epoch {epoch+1}/{epochs} | Loss: {avg_loss:.3f}")
+    if config['calculate_probs']: # useful for data maps
+        all_epochs_probs = [calculate_probs(current_preds) for current_preds in all_epochs_preds]
 
     # Save the model
-    model.save_pretrained('./mutual_model')
+    out_dir = config['out_dir']
+    checkpoint_name = get_checkpoint_name(config)
+    save_path = os.path.join(out_dir, checkpoint_name)
+    model.save_pretrained(save_path)
+
+
+def load_config(path):
+    # Open and read the JSON file
+    with open(path, 'r') as file:
+        config = json.load(file)
+    return config
 
 if __name__ == "__main__":
-    main()
+    config_path = os.path.join("conf", "config.json")
+    config = load_config(config_path)
+    main(config)
