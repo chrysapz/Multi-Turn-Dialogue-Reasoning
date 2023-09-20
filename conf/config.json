@@ -1,0 +1,15 @@
+{
+    "data_dir": "data",
+    "out_dir": "checkpoints",
+    "dataset_name": "mutual",
+    "model_name": "roberta-base",
+    "tokenizer_name": "roberta-base",
+    "max_seq_length": 256,
+    "batch_size": 2,
+    "learning_rate": 2e-5,
+    "epochs": 1,
+    "weight_decay": 0.0,
+    "seed": 0,
+    "adam_epsilon": 1e-8,
+    "calculate_probs": true
+}
