@@ -6,10 +6,13 @@
     "tokenizer_name": "roberta-base",
     "max_seq_length": 256,
     "batch_size": 2,
-    "learning_rate": 2e-5,
+    "learning_rate": 5e-5,
     "epochs": 1,
     "weight_decay": 0.0,
     "seed": 0,
     "adam_epsilon": 1e-8,
-    "calculate_probs": true
+    "warmup_steps":0,
+    "max_grad_norm":1.0,
+    "calculate_probs": true,
+    "debug": true
 }

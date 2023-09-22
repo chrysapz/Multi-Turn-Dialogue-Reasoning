@@ -28,16 +28,26 @@ def load_sample_from_file(filename):
 
 def tokenize_roberta_data(data, tokenizer, max_seq_length):
     """
-    We feed into BERT:
-        history, option_1 -> BERT
-        history, option_2 -> BERT
-        etc. seperately
+    We feed into BERT and do binary classification:
+        history, option_1 -> BERT -> (p, 1-p) loss
+        history, option_2 -> BERT -> (p, 1-p) loss
+        etc. seperately 
+
+    Alternatively, we could 
+        history, option_1 -> BERT -> (p_1, 1-p) 
+        history, option_2 -> BERT -> (p_2, 1-p) 
+        etc. for options 3, 4 
+
+        one loss function (p_1, p_2, p_3, p_4) where first element always the true label
+
     """
 
     tokenized_input_ids = []
     tokenized_attention_mask = []
     option_flags = [] # 0 or 1 depending on whether it is the correct choice or not
-    for label_id, options, context_history in data:
+    sentences_id = []
+    options_id = []
+    for sentence_id, (label_id, options, context_history) in enumerate(data):
         for option_id, option in enumerate(options):
             '''done similarly here https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_xnli.py#L337'''
             # sep_token_id added between the 2 sentences
@@ -49,8 +59,10 @@ def tokenize_roberta_data(data, tokenizer, max_seq_length):
             tokenized_input_ids.append(tokenizer_dict['input_ids'])
             tokenized_attention_mask.append(tokenizer_dict['attention_mask'])
             option_flags.append(option_flag)
+            sentences_id.append(sentence_id)
+            options_id.append(option_id)
 
-    return tokenized_input_ids, tokenized_attention_mask, option_flags    
+    return tokenized_input_ids, tokenized_attention_mask, option_flags, sentences_id, options_id
 
 def create_dataset(base_dir, split, tokenizer, max_seq_length):
     """
@@ -59,8 +71,8 @@ def create_dataset(base_dir, split, tokenizer, max_seq_length):
     if split not in ['train', 'dev', 'test']:
         raise ValueError('Split argument can take values train, dev or test')
     split_samples = load_all_samples(base_dir, split)
-    tokenized_input_ids, tokenized_attention_mask, option_flags = tokenize_roberta_data(split_samples, tokenizer, max_seq_length)
-    dataset = MutualDataset(tokenized_input_ids, tokenized_attention_mask, option_flags)
+    tokenized_input_ids, tokenized_attention_mask, option_flags, sentence_ids, option_ids = tokenize_roberta_data(split_samples, tokenizer, max_seq_length)
+    dataset = MutualDataset(tokenized_input_ids, tokenized_attention_mask, option_flags, sentence_ids, option_ids)
     return dataset
 
 def main(config):

@@ -5,19 +5,8 @@ import json
 from transformers import AutoModelForSequenceClassification, AdamW, AutoTokenizer, AutoModelForMultipleChoice, DataCollatorWithPadding
 from torch.utils.data import DataLoader
 from data import create_dataset
-from evaluate import evaluate, calculate_probs
-
-def set_seed(seed):
-    """
-    Function for setting the seed for reproducibility.
-    """
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+from evaluate import evaluate_data, calculate_probs
+from utils import set_seed, get_checkpoint_name
 
 
 def train(model, train_dataset, dev_dataset, config, tokenizer, device):
@@ -33,7 +22,9 @@ def train(model, train_dataset, dev_dataset, config, tokenizer, device):
     ]
     #! they pass epsilon as an argument in their code. Maybe we can tune it at a later stage if our results deviate from theirs.
     optimizer = AdamW(optimizer_grouped_parameters, lr=config['learning_rate'], eps=config['adam_epsilon'])
-
+    # t_total = len(train_dataloader) * config['epochs']
+    # # scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=config['warmup_steps'],
+    #                                              num_training_steps=t_total)
     epochs = config['epochs']
 
     epoch_loss = []
@@ -49,18 +40,19 @@ def train(model, train_dataset, dev_dataset, config, tokenizer, device):
         for batch in train_loader:
             optimizer.zero_grad()
 
-            inputs = {key: value.to(device) for key, value in batch.items()}
+            inputs = {key: value.to(device) for key, value in batch.items() if key not in ['sentence_id','option_id']} #sentence_id is useful only for metrics
             outputs = model(**inputs)
             loss = outputs[0]
 
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), config['max_grad_norm'])
             optimizer.step()
-
+            # scheduler.step()  # Update learning rate schedule
             total_loss += loss.item()
             cur_epoch_preds.append(outputs.logits.cpu().detach())
             cur_epoch_labels.append(batch['labels'].cpu().detach())
 
-            # break #! todo remove this
+            if config['debug']: break #! todo remove this
         
         # Concatenate training predictions and training labels
         cur_epoch_preds = torch.cat(cur_epoch_preds, dim=0)
@@ -70,17 +62,13 @@ def train(model, train_dataset, dev_dataset, config, tokenizer, device):
 
         avg_train_loss = total_loss / len(train_loader)
         epoch_loss.append(avg_train_loss)
-        print(f"Epoch {epoch+1}/{epochs} | Training Loss: {avg_train_loss:.3f}")
+        print(f"Epoch {epoch+1}/{epochs} | Training Loss: {avg_train_loss}")
 
-        eval_preds, eval_labels, eval_loss = evaluate(model, dev_dataset, config, tokenizer, device)
-        #todo add proper function for calculating metrics
+        eval_preds, eval_labels, eval_loss = evaluate_data(model, dev_dataset, config, tokenizer, device)
         #todo apply early stopping
         
     return model, epoch_loss, all_epochs_preds, all_epochs_labels
 
-def get_checkpoint_name(config):
-    config_name =  f"{config['dataset_name']}_{config['model_name']}"
-    return config_name
 
 def main(config):
     print('Training')
@@ -120,3 +108,4 @@ if __name__ == "__main__":
     config_path = os.path.join("conf", "config.json")
     config = load_config(config_path)
     main(config)
+    
