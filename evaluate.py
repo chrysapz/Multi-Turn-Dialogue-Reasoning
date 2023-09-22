@@ -2,17 +2,15 @@ import json
 import os
 import torch
 from utils import set_seed, get_checkpoint_name
-from data import create_dataset
-from transformers import AutoTokenizer, DataCollatorWithPadding, AutoModelForSequenceClassification
-from torch.utils.data import DataLoader
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, DataCollatorWithPadding
 from torch.nn import functional as F
 from collections import defaultdict
 from utils import calculate_IR_metrics
+from data import load_all_samples
+from torch.utils.data import DataLoader
 
-def evaluate_data(model, dataset, config, tokenizer, device):
-    collate_fn = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
-    data_loader = DataLoader(dataset, shuffle=False, batch_size=config['batch_size'], collate_fn = collate_fn)
-    
+def evaluate_data(model, data_loader, config, device):
+
     model.eval()
     total_loss = 0
     labels = []
@@ -40,7 +38,6 @@ def evaluate_data(model, dataset, config, tokenizer, device):
     if config['calculate_probs']: # useful for data maps
         preds = calculate_probs(preds)
 
-    #
     grouped_data, labeled_data = group_data(sentence_ids, option_ids, preds, labels)
     sorted_data = sort_grouped_data(grouped_data)
     if not config['debug']:
@@ -88,6 +85,9 @@ def calculate_probs(logits):
     return probs
 
 def main(config):
+
+    from train import dataset_per_mode
+    
     print('Evaluation')
     print(config)
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
@@ -96,16 +96,22 @@ def main(config):
     set_seed(config['seed'])
     tokenizer = AutoTokenizer.from_pretrained(config['tokenizer_name'])
 
-    dev_dataset = create_dataset(base_dir, 'dev', tokenizer, config['max_seq_length'])
+    dataset_class = dataset_per_mode[config['mode']]
+
+    dev_samples = load_all_samples(base_dir, 'dev')
+    dev_dataset = dataset_class(dev_samples, tokenizer, config['max_seq_length'])
+
+    dev_collate_fn = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
+    dev_loader = DataLoader(dev_dataset, shuffle=False, batch_size=config['batch_size'], collate_fn=dev_collate_fn)
 
     #load the model
     #todo change this. Now we only allow checkpoints from the same config file
     out_dir = config['out_dir']
-    checkpoint_name = get_checkpoint_name(config)
+    checkpoint_name = 'mutual_roberta-base_9_22_20_16' # get_checkpoint_name(config)
     save_path = os.path.join(out_dir, checkpoint_name)
     model = AutoModelForSequenceClassification.from_pretrained(save_path, num_labels = 2)
 
-    preds, labels, avg_loss = evaluate_data(model, dev_dataset, config, tokenizer, device)
+    preds, labels, avg_loss = evaluate_data(model, dev_loader, config, device)
 
 def load_config(path):
     # Open and read the JSON file

@@ -1,4 +1,5 @@
 {
+    "mode": "binary",
     "data_dir": "data",
     "out_dir": "checkpoints",
     "dataset_name": "mutual",

@@ -4,27 +4,14 @@ import numpy as np
 import json
 from transformers import AutoModelForSequenceClassification, AdamW, AutoTokenizer, AutoModelForMultipleChoice, DataCollatorWithPadding
 from torch.utils.data import DataLoader
-from data import create_dataset
-from evaluate import evaluate_data, calculate_probs
 from utils import set_seed, get_checkpoint_name
+from data import load_all_samples
+from mutual_dataset import MutualDataset
 
+from evaluate import evaluate_data, calculate_probs
 
-def train(model, train_dataset, dev_dataset, config, tokenizer, device):
-    collate_fn = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
-    train_loader = DataLoader(train_dataset, shuffle=True, batch_size=config['batch_size'], collate_fn = collate_fn)
- 
-    # common trick applied also in the paper https://github.com/Nealcly/MuTual/blob/master/baseline/multi-choice/run_multiple_choice.py#L101
-    no_decay = ['bias', 'LayerNorm.weight']
-    optimizer_grouped_parameters = [
-        {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
-         'weight_decay':config['weight_decay']},
-        {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-    ]
-    #! they pass epsilon as an argument in their code. Maybe we can tune it at a later stage if our results deviate from theirs.
-    optimizer = AdamW(optimizer_grouped_parameters, lr=config['learning_rate'], eps=config['adam_epsilon'])
-    # t_total = len(train_dataloader) * config['epochs']
-    # # scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=config['warmup_steps'],
-    #                                              num_training_steps=t_total)
+def train(model, train_loader, dev_loader, optimizer, config, device):
+    
     epochs = config['epochs']
 
     epoch_loss = []
@@ -64,13 +51,18 @@ def train(model, train_dataset, dev_dataset, config, tokenizer, device):
         epoch_loss.append(avg_train_loss)
         print(f"Epoch {epoch+1}/{epochs} | Training Loss: {avg_train_loss}")
 
-        eval_preds, eval_labels, eval_loss = evaluate_data(model, dev_dataset, config, tokenizer, device)
+        eval_preds, eval_labels, eval_loss = evaluate_data(model, dev_loader, config, device)
         #todo apply early stopping
         
     return model, epoch_loss, all_epochs_preds, all_epochs_labels
 
 
+dataset_per_mode = {
+    'binary': MutualDataset
+}
+
 def main(config):
+
     print('Training')
     print(config)
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
@@ -79,14 +71,38 @@ def main(config):
     set_seed(config['seed'])
 
     tokenizer = AutoTokenizer.from_pretrained(config['tokenizer_name'])
-    train_dataset = create_dataset(base_dir, 'train', tokenizer, config['max_seq_length'])
-    dev_dataset = create_dataset(base_dir, 'dev', tokenizer, config['max_seq_length'])
+
+    dataset_class = dataset_per_mode[config['mode']]
+
+    train_samples = load_all_samples(base_dir, 'train')
+    train_dataset = dataset_class(train_samples, tokenizer, config['max_seq_length'])
+
+    dev_samples = load_all_samples(base_dir, 'dev')
+    dev_dataset = dataset_class(dev_samples, tokenizer, config['max_seq_length'])
 
     # create the model
     model = AutoModelForSequenceClassification.from_pretrained(config['model_name'], num_labels = 2)
     model = model.to(device)
 
-    model, avg_loss, all_epochs_preds, all_epochs_labels = train(model, train_dataset, dev_dataset, config, tokenizer, device)
+    train_collate_fn = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
+    train_loader = DataLoader(train_dataset, shuffle=True, batch_size=config['batch_size'], collate_fn=train_collate_fn)
+
+    dev_collate_fn = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
+    dev_loader = DataLoader(dev_dataset, shuffle=False, batch_size=config['batch_size'], collate_fn=dev_collate_fn)
+
+    # common trick applied also in the paper https://github.com/Nealcly/MuTual/blob/master/baseline/multi-choice/run_multiple_choice.py#L101
+    no_decay = ['bias', 'LayerNorm.weight']
+    optimizer_grouped_parameters = [
+        {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+         'weight_decay':config['weight_decay']},
+        {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+    ]
+    #! they pass epsilon as an argument in their code. Maybe we can tune it at a later stage if our results deviate from theirs.
+    optimizer = AdamW(optimizer_grouped_parameters, lr=config['learning_rate'], eps=config['adam_epsilon'])
+    # t_total = len(train_dataloader) * config['epochs']
+    # # scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=config['warmup_steps'], num_training_steps=t_total)
+
+    model, avg_loss, all_epochs_preds, all_epochs_labels = train(model, train_loader, dev_loader, optimizer, config, device)
 
     if config['calculate_probs']: # useful for data maps
         all_epochs_probs = [calculate_probs(current_preds) for current_preds in all_epochs_preds]
