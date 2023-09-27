@@ -1,0 +1,17 @@
+name: nlp
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python
+  - pip
+  - pytorch-cuda
+  - pytorch
+  - pip:
+    - transformers
+    - peft
+    - tqdm
+    - matplotlib
+    - numpy
