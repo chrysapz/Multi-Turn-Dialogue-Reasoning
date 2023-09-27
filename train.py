@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from utils import set_seed, get_checkpoint_name
 from data import load_all_samples
 from mutual_dataset import MutualDataset
-
+import matplotlib.pyplot as plt
 from evaluate import evaluate_data, calculate_probs
 
 def train(model, train_loader, dev_loader, optimizer, config, device):
@@ -23,7 +23,6 @@ def train(model, train_loader, dev_loader, optimizer, config, device):
 
         cur_epoch_preds = []
         cur_epoch_labels = []
-
         for batch in train_loader:
             optimizer.zero_grad()
 
@@ -53,7 +52,8 @@ def train(model, train_loader, dev_loader, optimizer, config, device):
 
         eval_preds, eval_labels, eval_loss = evaluate_data(model, dev_loader, config, device)
         #todo apply early stopping
-        
+    
+
     return model, epoch_loss, all_epochs_preds, all_epochs_labels
 
 
@@ -108,11 +108,15 @@ def main(config):
         all_epochs_probs = [calculate_probs(current_preds) for current_preds in all_epochs_preds]
 
     # Save the model
+    #! be cautious not to exhaust memory since we save it every time
     out_dir = config['out_dir']
     checkpoint_name = get_checkpoint_name(config)
     save_path = os.path.join(out_dir, checkpoint_name)
     model.save_pretrained(save_path)
 
+    out_path = os.path.join(save_path, "training_loss.png")
+    plt.plot(avg_loss)
+    plt.savefig(out_path)
 
 def load_config(path):
     # Open and read the JSON file
