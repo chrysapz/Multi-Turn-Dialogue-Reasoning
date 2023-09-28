@@ -52,8 +52,8 @@ import os
 
 logger = logging.getLogger(__name__)
 
-ALL_MODELS = sum(
-    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, XLNetConfig, RobertaConfig)), ())
+# ALL_MODELS = sum(
+#     (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, XLNetConfig, RobertaConfig)), ())
 
 MODEL_CLASSES = {
     'bert': (BertConfig, BertForMultipleChoice, BertTokenizer),
@@ -150,9 +150,10 @@ def train(args, train_dataset, model, tokenizer):
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {'input_ids': batch[0],
                       'attention_mask': batch[1],
-                      'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,
+                    #   'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,
                       # XLM don't use segment_ids
-                      'labels': batch[3]}
+                    #   'labels': batch[3]}
+                        'labels': batch[2]}
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
@@ -260,9 +261,10 @@ def evaluate(args, model, tokenizer, prefix="", test=False):
             with torch.no_grad():
                 inputs = {'input_ids': batch[0],
                           'attention_mask': batch[1],
-                          'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,
+                        #   'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,
                           # XLM don't use segment_ids
-                          'labels': batch[3]}
+                        #   'labels': batch[3]}
+                            'labels':batch[2]}
                 outputs = model(**inputs)
                 tmp_eval_loss, logits = outputs[:2]
 
@@ -319,6 +321,9 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, test=False):
     else:
         cached_mode = 'train'
     assert (evaluate == True and test == True) == False
+    print(cached_mode)
+    print(list(filter(None, args.model_name_or_path.split('/'))).pop())
+
     cached_features_file = os.path.join(args.data_dir, 'cached_{}_{}_{}_{}'.format(
         cached_mode,
         list(filter(None, args.model_name_or_path.split('/'))).pop(),
@@ -327,6 +332,8 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, test=False):
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
+        print("features")
+        print(features)
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
         label_list = processor.get_labels()
@@ -336,6 +343,8 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, test=False):
             examples = processor.get_test_examples(args.data_dir)
         else:
             examples = processor.get_train_examples(args.data_dir)
+        print(args.data_dir)
+        print(examples)
         logger.info("Training number: %s", str(len(examples)))
         features = convert_examples_to_features(
             examples,
@@ -345,6 +354,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, test=False):
             pad_on_left=bool(args.model_type in ['xlnet']),  # pad on the left for xlnet
             pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0
         )
+
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
@@ -355,10 +365,11 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, test=False):
     # Convert to Tensors and build dataset
     all_input_ids = torch.tensor(select_field(features, 'input_ids'), dtype=torch.long)
     all_input_mask = torch.tensor(select_field(features, 'input_mask'), dtype=torch.long)
-    all_segment_ids = torch.tensor(select_field(features, 'segment_ids'), dtype=torch.long)
+    # all_segment_ids = torch.tensor(select_field(features, 'segment_ids'), dtype=torch.long)
     all_label_ids = torch.tensor([f.label for f in features], dtype=torch.long)
 
-    dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+    # dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+    dataset = TensorDataset(all_input_ids, all_input_mask,  all_label_ids)
     return dataset
 
 
@@ -366,16 +377,15 @@ def main():
     parser = argparse.ArgumentParser()
 
     ## Required parameters
-    parser.add_argument("--data_dir", default=None, type=str, required=True,
+    parser.add_argument("--data_dir", default="data/mutual", type=str,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
-    parser.add_argument("--model_type", default=None, type=str, required=True,
+    parser.add_argument("--model_type", default="roberta", type=str,
                         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
-    parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
-                        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(
-                            ALL_MODELS))
-    parser.add_argument("--task_name", default=None, type=str, required=True,
+    parser.add_argument("--model_name_or_path", default="roberta-base", type=str, 
+                        help="Path to pre-trained model or shortcut name selected in the list: " + ",")
+    parser.add_argument("--task_name", default="mutual", type=str,
                         help="The name of the task to train selected in the list: " + ", ".join(processors.keys()))
-    parser.add_argument("--output_dir", default=None, type=str, required=True,
+    parser.add_argument("--output_dir", default="./output", type=str,
                         help="The output directory where the model predictions and checkpoints will be written.")
 
     ## Other parameters
@@ -429,7 +439,7 @@ def main():
                         help="Avoid using CUDA when available")
     parser.add_argument('--overwrite_output_dir', action='store_true',
                         help="Overwrite the content of the output directory")
-    parser.add_argument('--overwrite_cache', action='store_true',
+    parser.add_argument('--overwrite_cache', action='store_false',
                         help="Overwrite the cached training and evaluation sets")
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
@@ -487,7 +497,6 @@ def main():
     processor = processors[args.task_name]()
     label_list = processor.get_labels()
     num_labels = len(label_list)
-
     # Load pretrained model and tokenizer
     if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
@@ -505,7 +514,7 @@ def main():
                                         from_tf=bool('.ckpt' in args.model_name_or_path),
                                         config=config,
                                         cache_dir=args.cache_dir if args.cache_dir else None)
-
+    print("xrisoula")
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
