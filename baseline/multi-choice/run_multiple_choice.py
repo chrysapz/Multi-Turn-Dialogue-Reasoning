@@ -514,7 +514,11 @@ def main():
                                         from_tf=bool('.ckpt' in args.model_name_or_path),
                                         config=config,
                                         cache_dir=args.cache_dir if args.cache_dir else None)
+<<<<<<< HEAD
     
+=======
+    print("xrisoula")
+>>>>>>> c308afe90712ffaa5e4b94e26a88aa52b7de1bd4
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
