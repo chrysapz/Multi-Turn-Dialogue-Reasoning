@@ -165,6 +165,7 @@ def convert_examples_to_features(
     Loads a data file into a list of `InputFeatures`
     """
 
+
     label_map = {label : i for i, label in enumerate(label_list)}
 
     features = []
@@ -180,6 +181,7 @@ def convert_examples_to_features(
             #     text_b = example.question.replace("_", ending)
             # else:
             text_b = ending
+
 
             inputs = tokenizer.encode_plus(
                 text_a,
@@ -215,7 +217,6 @@ def convert_examples_to_features(
             # choices_features.append((input_ids, attention_mask, token_type_ids))
             choices_features.append((input_ids, attention_mask))
             
-
 
         label = label_map[example.label]
 
