@@ -54,8 +54,8 @@ class MutualDataset(data.Dataset):
             for option_id, option in enumerate(options):
                 '''done similarly here https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_xnli.py#L337'''
                 # sep_token_id added between the 2 sentences
-                tokenizer_dict = tokenizer(context_history, option, truncation=True, max_length = max_seq_length)
-                
+                #tokenizer_dict = tokenizer(context_history, option, truncation=True, max_length = max_seq_length)
+                tokenizer_dict = tokenizer.encode_plus(context_history, option, truncation=True, max_length = max_seq_length)
                 #!todo check whether bert considers 0 or 1 as the correct choice
                 option_flag = 1 if label_id == option_id else 0 # check whether the option is correct
 

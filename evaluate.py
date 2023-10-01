@@ -40,17 +40,21 @@ def evaluate_data(model, data_loader, config, device):
 
     grouped_data, labeled_data = group_data(sentence_ids, option_ids, preds, labels)
     sorted_data = sort_grouped_data(grouped_data)
+    metrics = {}
     if not config['debug']:
         r_1, r_2, mrr = calculate_IR_metrics(sorted_data, labeled_data)
+        metrics['r1'] = r_1
+        metrics['r2'] = r_2
+        metrics['mrr'] = mrr
 
     avg_loss = total_loss / len(data_loader)
     model.train()
 
-    return preds, labels, avg_loss
+    return preds, labels, avg_loss, metrics
 
 def group_data(sentence_ids, option_ids, probabilities, labels):
     grouped_data = defaultdict(list) # {sentence_id : [(option_id, predict_positive_prob),..]}
-    labeled_data = defaultdict(int) # {sentence_id : true_label}
+    labeled_data = defaultdict(int) # {sentence_id : option_id}
     # Iterate through the lists and group based on sentence IDs
     for sentence_id, option_id, probability, label in zip(sentence_ids, option_ids, probabilities, labels):
         #tensor to scalar
@@ -59,7 +63,8 @@ def group_data(sentence_ids, option_ids, probabilities, labels):
         pos_probability, label = probability[1].item(), label.item()
 
         grouped_data[sentence_id].append((option_id, pos_probability))
-        labeled_data[sentence_id] = label
+        if label == 1:
+            labeled_data[sentence_id] = option_id
 
     return grouped_data, labeled_data
 
@@ -123,7 +128,12 @@ if __name__ == "__main__":
     # just for check
     # grouped_data = {1:[(1,0.4), (3,0.7)], 2:[(3,0.8),(2,0.5)]}
     # an = sort_grouped_data(grouped_data)
-
-    config_path = os.path.join("conf", "config.json")
-    config = load_config(config_path)
-    main(config)
+    sentence_ids = torch.tensor([0,1,0,1,0,1,0,1])
+    option_ids = torch.tensor([1,2,0,1,2,3,3,0])
+    preds = torch.tensor([[0,0.99],[0,0.99],[1,0],[1,0],[1,0],[1,0],[0.1,0.9],[0.4,0.6]])
+    labels = torch.tensor([0,0,0,0,0,0,1,1])
+    assert (len(sentence_ids) == len(option_ids) == len(preds) == len(labels))
+    grouped_data, labeled_data = group_data(sentence_ids, option_ids, preds, labels)
+    sorted_data = sort_grouped_data(grouped_data)
+    r_1, r_2, mrr = calculate_IR_metrics(sorted_data, labeled_data)
+    a=1
