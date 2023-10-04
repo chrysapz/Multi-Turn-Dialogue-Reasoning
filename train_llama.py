@@ -25,7 +25,7 @@ def main(config):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(device,' device!!!!')
     set_seed(config['seed'])
-    MY_TOKEN = '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'
+    MY_TOKEN = 'your_code'
     tokenizer = AutoTokenizer.from_pretrained(config['tokenizer_name'], use_fast=True, token=MY_TOKEN)
 
     # tokenizer info
