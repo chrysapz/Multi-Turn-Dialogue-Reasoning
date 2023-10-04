@@ -1,12 +1,14 @@
 import torch
 import numpy as np
 import datetime
+import random
 
 # see https://github.com/Nealcly/MuTual/blob/master/eval_sample/eval.py
 def set_seed(seed):
     """
     Function for setting the seed for reproducibility.
     """
+    random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
