@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import json
 from transformers import AutoModelForSequenceClassification, AdamW, AutoTokenizer, \
-    AutoModelForMultipleChoice, DataCollatorForLanguageModeling, AutoModelForCausalLM, TrainingArguments
+    AutoModelForMultipleChoice, DataCollatorForLanguageModeling, AutoModelForCausalLM, TrainingArguments, Trainer
 from peft import (LoraConfig, TaskType, get_peft_model,
                   prepare_model_for_int8_training)
 from torch.utils.data import DataLoader
@@ -25,7 +25,7 @@ def main(config):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(device,' device!!!!')
     set_seed(config['seed'])
-    MY_TOKEN = 'VALE TON KWDIKO SOU APO https://huggingface.co/settings/tokens'
+    MY_TOKEN = 'put your code'
     tokenizer = AutoTokenizer.from_pretrained(config['tokenizer_name'], use_fast=True, token=MY_TOKEN)
 
     # tokenizer info
@@ -95,10 +95,10 @@ def main(config):
         metric_for_best_model="eval_loss"
     )
 
-    # trainer = Trainer(model, training_arguments, train_dataset=train_dataset, eval_dataset=dev_dataset, data_collator = train_collate_fn,
-    #         tokenizer=tokenizer)
-    # print('Training...')
-    # trainer.train()
+    trainer = Trainer(model, training_arguments, train_dataset=train_dataset, eval_dataset=dev_dataset, data_collator = train_collate_fn,
+            tokenizer=tokenizer)
+    print('Training...')
+    trainer.train()
 
 
     # model.eval()
