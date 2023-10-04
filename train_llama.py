@@ -55,18 +55,18 @@ def main(config):
         train_samples =  train_samples[:10]
         dev_samples =  dev_samples[:10]
         config['batch_size'] = 2
-        model = AutoModelForCausalLM.from_pretrained('gpt2')#, load_in_8bit=True, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained('gpt2', load_in_8bit=True, device_map="auto")
     #! todo add attention_masks
     train_dataset = Llama_dataset(tokenizer, train_samples)
     dev_dataset = Llama_dataset(tokenizer, dev_samples)
 
     if not config['debug']:
-        model = AutoModelForCausalLM.from_pretrained(config['model_name'], token = MY_TOKEN)#, load_in_8bit=True, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(config['model_name'], token = MY_TOKEN, load_in_8bit=True, device_map="auto")
     model = model.to(device)
     model.resize_token_embeddings(model.config.vocab_size + 1)
 
     # #quaa
-    # model = prepare_model_for_int8_training(model)
+    model = prepare_model_for_int8_training(model)
 
     target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj'] if 'llama' in config['model_name'] and not config['debug'] else None # edit with your desired target modules
     peft_config = LoraConfig(
