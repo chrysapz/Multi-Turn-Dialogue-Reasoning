@@ -39,10 +39,10 @@ import torch.utils.data as data
 
 class Llama_dataset(data.Dataset):
     
-    def __init__(self, tokenizer: AutoTokenizer, split_samples):
+    def __init__(self, tokenizer: AutoTokenizer, split_samples, do_generate):
         self.tokenizer = tokenizer
         dialogs, all_answers = self.text2dialogformat(split_samples)
-        all_input_ids, all_attention_masks, all_labels = self.tokenize_text(dialogs, all_answers)
+        all_input_ids, all_attention_masks, all_labels = self.tokenize_text(dialogs, all_answers, do_generate)
         self.all_input_ids = all_input_ids
         self.all_attention_masks = all_attention_masks
         self.all_labels = all_labels
@@ -57,6 +57,7 @@ class Llama_dataset(data.Dataset):
         input_ids = self.all_input_ids[idx]
         attention_mask = self.all_attention_masks[idx]
         label = self.all_labels[idx]
+        
         # return input_ids, attention_mask, label
         return input_ids, attention_mask, label
         # return {"input_ids": input_ids, 'attention_mask':attention_mask,'labels': label}
@@ -138,7 +139,7 @@ class Llama_dataset(data.Dataset):
 
     def tokenize_text(
         self,
-        dialogs, labels = None 
+        dialogs, labels, do_generate
     ):
  
         prompt_tokens = []
@@ -202,18 +203,32 @@ class Llama_dataset(data.Dataset):
             cur_label_ids.extend(self.tokenizer.encode(label_text.strip() , add_special_tokens=False)  )
             cur_label_ids.append(self.tokenizer.eos_token_id)
 
-            # we add the labels to the input to the model since we are doing next word prediction
-            dialog_tokens.extend(cur_label_ids)
+            # we add the labels to the input to the model since we are doing next word prediction of the whole sentence during training
+            if not do_generate:
+                dialog_tokens.extend(cur_label_ids)
 
             # now add to the big lists
             prompt_tokens.append(dialog_tokens)
             attention_masks.append([1] * len(prompt_tokens[-1]) )
             label_ids.append(dummy_label_ids + cur_label_ids)
-            # check that all have the same size
-            assert(len(prompt_tokens[-1]) == len(attention_masks[-1]) == len(label_ids[-1]) )
+            # # check that all have the same size
+            # assert(len(prompt_tokens[-1]) == len(attention_masks[-1]) == len(label_ids[-1]) )
 
         print(f' {c} times last message from assistant')
         return prompt_tokens, attention_masks, label_ids
+
+# it's not possible to pass sentences_id in the HF trainer so I create a subclass for inference
+class Llama_with_sent_ids_dataset(Llama_dataset):
+    
+    def __init__(self, tokenizer: AutoTokenizer, split_samples, do_generate, dev_ids):
+        super().__init__(tokenizer, split_samples, do_generate)
+        all_sentences_id = dev_ids
+        self.all_sentences_id = all_sentences_id
+
+    def __getitem__(self, idx):
+        input_ids, attention_mask, label = super().__getitem__(idx)
+        sentence_id = self.all_sentences_id[idx]
+        return input_ids, attention_mask, label, sentence_id
 
 # if __name__=='__main__':
 #     [{'role':'user','content':'first text user1'}, {'role':'assistant','content':'first text user 2'}]

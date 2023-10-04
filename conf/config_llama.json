@@ -15,5 +15,9 @@
     "warmup_steps": 0,
     "max_grad_norm": 1.0,
     "calculate_probs": true,
-    "debug": false
+    "debug": false,
+    "hf_token": "your_code",
+    "rank": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0.1
 }

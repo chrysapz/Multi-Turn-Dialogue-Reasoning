@@ -39,46 +39,16 @@ class LLama_DataCollatorForLanguageModeling(DataCollatorForLanguageModeling):
     pad_to_multiple_of: Optional[int] = None
     tf_experimental_compile: bool = False
     return_tensors: str = "pt"
-
-    #! added self for convenience and didn't change anything else
-    def _torch_collate_batch(self, examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
-        """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
-        import torch
-
-        # Tensorize if necessary.
-        if isinstance(examples[0], (list, tuple, np.ndarray)):
-            examples = [torch.tensor(e, dtype=torch.long) for e in examples]
-
-        length_of_first = examples[0].size(0)
-
-        # Check if padding is necessary.
-
-        are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
-        if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
-            return torch.stack(examples, dim=0)
-
-        # If yes, check if we have a `pad_token`.
-        if tokenizer._pad_token is None:
-            raise ValueError(
-                "You are attempting to pad samples but the tokenizer you are using"
-                f" ({tokenizer.__class__.__name__}) does not have a pad token."
-            )
-
-        # Creating the full tensor and filling it with our data.
-        max_length = max(x.size(0) for x in examples)
-        if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
-            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-        result = examples[0].new_full([len(examples), max_length], tokenizer.pad_token_id)
-        for i, example in enumerate(examples):
-            if tokenizer.padding_side == "right":
-                result[i, : example.shape[0]] = example
-            else:
-                result[i, -example.shape[0] :] = example
-        return result
     
-    #! changed this function
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        input_ids, attention_masks, labels = zip(*examples)
+        batch = {}
+        if len(examples[0]) == 4: # useful only when using model.generate
+            input_ids, attention_masks, labels, sentences_id = zip(*examples)
+            sentences_id = torch.tensor(sentences_id)
+            batch['sentences_id'] = sentences_id
+        elif len(examples[0]) == 3:
+            input_ids, attention_masks, labels = zip(*examples)
+
 
         # Pad input_ids
         max_input_length = max(len(ids) for ids in input_ids)
@@ -103,5 +73,7 @@ class LLama_DataCollatorForLanguageModeling(DataCollatorForLanguageModeling):
 
         # Convert attention_masks to tensor
         padded_attention_masks = torch.tensor(padded_attention_masks)
-        batch = {'input_ids':padded_input_ids,'attention_mask':padded_attention_masks,'labels':padded_labels}
+        batch['input_ids'] = padded_input_ids
+        batch['attention_mask']=padded_attention_masks
+        batch['labels']=padded_labels
         return batch
