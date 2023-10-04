@@ -25,7 +25,7 @@ def main(config):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(device,' device!!!!')
     set_seed(config['seed'])
-    MY_TOKEN = 'put your code'
+    MY_TOKEN = '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'
     tokenizer = AutoTokenizer.from_pretrained(config['tokenizer_name'], use_fast=True, token=MY_TOKEN)
 
     # tokenizer info
@@ -55,9 +55,11 @@ def main(config):
         train_samples =  train_samples[:10]
         dev_samples =  dev_samples[:10]
         config['batch_size'] = 2
-        model = AutoModelForCausalLM.from_pretrained('gpt2', load_in_8bit=True, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained('gpt2')#, load_in_8bit=True, device_map="auto")
     #! todo add attention_masks
+
     train_dataset = Llama_dataset(tokenizer, train_samples)
+    print('dev')
     dev_dataset = Llama_dataset(tokenizer, dev_samples)
 
     if not config['debug']:
@@ -66,8 +68,9 @@ def main(config):
     model.resize_token_embeddings(model.config.vocab_size + 1)
 
     # #quaa
-    model = prepare_model_for_int8_training(model)
+    # model = prepare_model_for_int8_training(model)
 
+    # here we define the modules we use for LORA
     target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj'] if 'llama' in config['model_name'] and not config['debug'] else None # edit with your desired target modules
     peft_config = LoraConfig(
                     task_type="CAUSAL_LM", inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1,
@@ -99,52 +102,54 @@ def main(config):
             tokenizer=tokenizer)
     print('Training...')
     trainer.train()
+    # trainer.evaluate()
 
 
     # model.eval()
 
-    # DEV_BATCH_SIZE = 1
-    # dev_loader = DataLoader(dev_dataset, shuffle=False, batch_size=DEV_BATCH_SIZE, collate_fn=dev_collate_fn)
-    # # Calculate perplexity
+    DEV_BATCH_SIZE = 2
+    dev_loader = DataLoader(dev_dataset, shuffle=False, batch_size=DEV_BATCH_SIZE, collate_fn=dev_collate_fn)
+    # Calculate perplexity
     # generated_info = {'sentence_id':[], 'generated_ids':[], 'perplexity':[]} #(sentence_id, generated_ids, perplexity_of_generated)
-    # with torch.no_grad():
-    #     for batch in dev_loader:
-    #         inputs = {key: value.to(device) for key, value in batch.items() if key not in ['sentence_id']} #sentence_id is useful only for metrics
-    #         # inputs.pop('labels')
-    #         # note that the difference between input_ids and labels is that in labels we have -100 in ignore tokens
-    #         outputs_ids = model.generate( #! maybe add trainer.model?
-    #             **inputs,
-    #             max_new_tokens=30,
-    #             output_scores=True,
-    #             return_dict_in_generate=True,
-    #             temperature = 1
-    #         )
-    #         whole_sequences_ids = outputs_ids['sequences'] #(batch_size, input_length+max_new_tokens)
-    #         generated_scores = outputs_ids['scores'] #it's a tuple of len max_new_tokens where each (batch_size, vocab_size)
+    generated_info = [] # [ (sentence_id, generated_text, perplexity) ]
+    with torch.no_grad():
+        for batch in dev_loader:
+            inputs = {key: value.to(device) for key, value in batch.items() if key not in ['sentence_id']} #sentence_id is useful only for metrics
+            inputs.pop('labels')
+            # note that the difference between input_ids and labels is that in labels we have -100 in ignore tokens
+            outputs_ids = model.generate( #! maybe add trainer.model?
+                **inputs,
+                max_new_tokens=30,
+                output_scores=True,
+                return_dict_in_generate=True,
+                temperature = 1
+            )
+
+            generated_tokens_ids = outputs_ids['sequences'] #(batch_size, input_length+max_new_tokens)
+            generated_scores = outputs_ids['scores'] #it's a tuple of len max_new_tokens where each (batch_size, vocab_size)
             
-    #         output_text = tokenizer.decode(whole_sequences_ids[0], skip_special_tokens=True)
+            # Convert the tuple of tensors into a single tensor with dimensions (max_new_tokens, batch_size, vocab_size)
+            scores_tensor = torch.stack(generated_scores)
 
-    #         #! not correct
-    #         # Calculate cross-entropy loss for each sequence in the batch
-    #         for i in range(len(whole_sequences_ids)):
-    #             # Get the logits for the generated sequence
-    #             generated_logits = generated_scores[i]
+            # Convert the scores into probabilities (max_new_tokens, batch_size, vocab_size)
+            probs = torch.nn.functional.softmax(scores_tensor, dim=-1)
 
-    #             # Calculate the cross-entropy loss
-    #             loss = torch.nn.functional.cross_entropy(generated_logits, inputs['labels'][i])
-    #             perplexity = torch.exp(loss).item()            
-    #             # Print or store the loss for this sequence
-    #             print(f"Loss for sequence {i}: {loss.item()}")
+            # Make sure generated_tokens_ids is a tensor of shape (batch_size, input_length + max_new_tokens)
+            generated_tokens_ids = torch.tensor(generated_tokens_ids)
 
-    #         if DEV_BATCH_SIZE == 1:
-    #             generated_info['sentence_id'].append(batch['sentence_id'][0])
-    #             generated_info['generated_ids'].append(outputs)
-    #             generated_info['perplexity'].append(perplexity)
-    #         else:
-    #             raise ValueError('We do not support batch size > 1')
+            # Gather the probabilities of the generated tokens
+            actual_probs = torch.gather(probs.permute(1,0,2), 2, generated_tokens_ids[:,-30:].unsqueeze(-1)).squeeze(dim=-1)
 
+            # Calculate the negative log likelihood for each sequence in the batch
+            nll_per_sequence = -torch.log(actual_probs).sum(dim=1)
 
+            perplexity = torch.exp(nll_per_sequence)
 
+            batch_generated_text = tokenizer.batch_decode(generated_tokens_ids[:, -30:], skip_special_tokens=True)
+
+            for generated_text, perpl, sent_id  in zip(batch_generated_text, perplexity,inputs['sentence_id']):
+                generated_info.append((sent_id, generated_text, perpl))
+    
 
 def load_config(path):
     # Open and read the JSON file

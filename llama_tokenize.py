@@ -61,6 +61,17 @@ class Llama_dataset(data.Dataset):
         return input_ids, attention_mask, label
         # return {"input_ids": input_ids, 'attention_mask':attention_mask,'labels': label}
 
+    def preprocess(self, initial_context_history, is_option=False):
+
+        split_sentences = re.split(r'(?<=[.!?])\s+', initial_context_history)
+        # if is_option:
+        #     if(len(split_sentences) != 1):
+        #         print('more')
+        # Add '\n' to the end of each sentence and join them back together
+        context_history = ' \n'.join(split_sentences)
+
+        context_history = context_history.strip()
+        return context_history
 
     def text2dialogformat(self, sentences):
         #! we preprocess only the context here
@@ -68,18 +79,22 @@ class Llama_dataset(data.Dataset):
         all_dialogs = []
         all_answers = []
         for label_id, options, initial_context_history in sentences:
-            correct_option = options[label_id]
+            unprocessed_correct_option = options[label_id]
+
+            correct_option = self.preprocess(unprocessed_correct_option, True)
+
             all_answers.append(correct_option)
             # history_with_label = initial_context_history +' '+correct_option
 
             # add new line at the end of each sentence
+            context_history = self.preprocess(initial_context_history)
 
-            split_sentences = re.split(r'(?<=[.!?])\s+', initial_context_history)
+            # split_sentences = re.split(r'(?<=[.!?])\s+', initial_context_history)
 
-            # Add '\n' to the end of each sentence and join them back together
-            context_history = ' \n'.join(split_sentences)
+            # # Add '\n' to the end of each sentence and join them back together
+            # context_history = ' \n'.join(split_sentences)
 
-            context_history = context_history.strip()
+            # context_history = context_history.strip()
 
             m_positions = [m.start() for m in re.finditer('m :', context_history)]
             f_positions = [m.start() for m in re.finditer('f :', context_history)]
@@ -168,17 +183,17 @@ class Llama_dataset(data.Dataset):
             
             # if the context dialog list has even number of elements then we will end up adding this twice
             if len(dialog) % 2 != 0:
+                #! we also add bos id but not eos id
                 last_context_tokens = self.tokenizer.encode(
-                    f"{B_INST} {(dialog[-1]['content']).strip()} {E_INST}",add_special_tokens=False
+                    f"{B_INST} {(dialog[-1]['content']).strip()} {E_INST}",add_special_tokens=True
                 )
-
 
                 dialog_tokens += last_context_tokens
             # cross entropy should ignore the context history so we put -100 there
             dummy_label_ids = [-100]*len(dialog_tokens)
-            
+            #todo rename to option_ids for more clarity
             cur_label_ids = []
-            if len(dialog) % 2 != 0: # odd context history
+            if len(dialog) % 2 == 0: # even context history we use special identifiers
                 cur_label_ids.append(self.tokenizer.bos_token_id)
                 b_inst_ids = self.tokenizer.encode(B_INST, add_special_tokens=False)
                 cur_label_ids.extend(b_inst_ids)

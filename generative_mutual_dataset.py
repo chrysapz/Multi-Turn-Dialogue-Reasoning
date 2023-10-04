@@ -1,6 +1,6 @@
 import torch.utils.data as data
 from transformers import DataCollatorForLanguageModeling, DataCollatorWithPadding
-
+#! we care only about the correct option in both classes
 class Seperate_Context_Option_Dataset(data.Dataset):
 
     def __init__(self, split_samples, tokenizer, max_seq_length):
@@ -48,10 +48,11 @@ class Seperate_Context_Option_Dataset(data.Dataset):
             option = options[label_id]
             # sep_token_id added between the 2 sentences
             input = context_history 
-            tokenizer_hist_dict = tokenizer(input, truncation=True, max_length = max_seq_length)
+            tokenizer_hist_dict = tokenizer(input, truncation=True, max_length = max_seq_length, add_special_tokens = False)
 
-            tokenizer_label_dict = tokenizer(option, truncation=True, max_length = 64, padding = 'max_length')
+            tokenizer_label_dict = tokenizer(option, truncation=True, max_length = max_seq_length, add_special_tokens = False)
             
+            # tmp_input_ids = 
 
             tokenized_input_ids.append(tokenizer_hist_dict['input_ids'])
             tokenized_attention_mask.append(tokenizer_hist_dict['attention_mask'])
@@ -83,9 +84,9 @@ class Concat_History_Option_Dataset(data.Dataset):
         self.attention_mask = attention_mask
         self.sentence_ids = sentence_ids
 
-        #! DataCollatorForLanguageModeling sets as labels the input and puts -100 in the padding token
-        collate_fn = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, pad_to_multiple_of=8)
-        self.collate_fn = collate_fn
+        # #! DataCollatorForLanguageModeling sets as labels the input and puts -100 in the padding token
+        # collate_fn = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, pad_to_multiple_of=8)
+        # self.collate_fn = collate_fn
 
     def __len__(self):
         # Number of data point we have
