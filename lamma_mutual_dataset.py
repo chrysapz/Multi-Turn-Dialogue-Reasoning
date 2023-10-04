@@ -51,18 +51,13 @@ class MutualDataset(data.Dataset):
         sentences_id = []
         options_id = []
         for sentence_id, (label_id, options, context_history) in enumerate(data):
-            for option_id, option in enumerate(options):
-                '''done similarly here https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_xnli.py#L337'''
-                # sep_token_id added between the 2 sentences
-                #tokenizer_dict = tokenizer(context_history, option, truncation=True, max_length = max_seq_length)
-                tokenizer_dict = tokenizer.encode_plus(context_history, option, truncation=True, max_length = max_seq_length)
-                #!todo check whether bert considers 0 or 1 as the correct choice
-                option_flag = 1 if label_id == option_id else 0 # check whether the option is correct
+            option = options[label_id]
+            '''done similarly here https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_xnli.py#L337'''
+            # sep_token_id added between the 2 sentences
+            tokenizer_dict = tokenizer(context_history, option, truncation=True, max_length = max_seq_length)
+        
+            tokenized_input_ids.append(tokenizer_dict['input_ids'])
+            tokenized_attention_mask.append(tokenizer_dict['attention_mask'])
+            sentences_id.append(sentence_id)
 
-                tokenized_input_ids.append(tokenizer_dict['input_ids'])
-                tokenized_attention_mask.append(tokenizer_dict['attention_mask'])
-                option_flags.append(option_flag)
-                sentences_id.append(sentence_id)
-                options_id.append(option_id)
-
-        return tokenized_input_ids, tokenized_attention_mask, option_flags, sentences_id, options_id
+        return tokenized_input_ids, tokenized_attention_mask, sentences_id

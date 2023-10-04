@@ -1,6 +1,8 @@
 #!/bin/bash
 
-#SBATCH --gres=gpu:0
+
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
 #SBATCH --job-name=Installnlp
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=3
@@ -13,5 +15,5 @@ module purge
 module load 2021
 module load Anaconda3/2021.05
 
-cd $HOME//
+cd $HOME/dl4nlp/Multi-Turn-Dialogue-Reasoning
 conda env create -f env_nlp.yml
