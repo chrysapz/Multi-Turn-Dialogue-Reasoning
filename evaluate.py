@@ -8,6 +8,7 @@ from collections import defaultdict
 from utils import calculate_IR_metrics
 from data import load_all_samples
 from torch.utils.data import DataLoader
+import numpy as np
 
 def evaluate_data(model, data_loader, config, device):
 
@@ -51,6 +52,23 @@ def evaluate_data(model, data_loader, config, device):
     model.train()
 
     return preds, labels, avg_loss, metrics
+
+def confidence(grouped_data, labeled_data, true_label_dict_probs):
+    '''
+    grouped_data: {sentence_id:[(option_id_epoch_0, prob_epoch_0)]]}
+    labeled_data: {sentence_id:corrept_option_id}
+    true_label_dict_probs: {sentence_id: [probs_epoch_0,probs_epoch_1]}
+    '''
+    for sentence_id in grouped_data:
+        option_probs_pairs = grouped_data[sentence_id]
+        correct_option_id = labeled_data[sentence_id]
+        for option_id, prob in option_probs_pairs:
+            if option_id == correct_option_id:
+                true_label_prob = prob
+                true_label_dict_probs[sentence_id].append(true_label_prob)
+
+ 
+    return true_label_dict_probs
 
 def group_data(sentence_ids, option_ids, probabilities, labels):
     grouped_data = defaultdict(list) # {sentence_id : [(option_id, predict_positive_prob),..]}
@@ -125,15 +143,39 @@ def load_config(path):
     return config
 
 if __name__ == "__main__":
-    # just for check
-    # grouped_data = {1:[(1,0.4), (3,0.7)], 2:[(3,0.8),(2,0.5)]}
-    # an = sort_grouped_data(grouped_data)
-    sentence_ids = torch.tensor([0,1,0,1,0,1,0,1])
-    option_ids = torch.tensor([1,2,0,1,2,3,3,0])
-    preds = torch.tensor([[0,0.99],[0,0.99],[1,0],[1,0],[1,0],[1,0],[0.1,0.9],[0.4,0.6]])
-    labels = torch.tensor([0,0,0,0,0,0,1,1])
-    assert (len(sentence_ids) == len(option_ids) == len(preds) == len(labels))
-    grouped_data, labeled_data = group_data(sentence_ids, option_ids, preds, labels)
-    sorted_data = sort_grouped_data(grouped_data)
-    r_1, r_2, mrr = calculate_IR_metrics(sorted_data, labeled_data)
+    grouped_data = {0:[(1,0.4),(0,0.2)], 1:[(1,0.1),(0,0.6)]}
+    labeled_data = {0:1,1:0}
+    true_label_dict_probs = defaultdict(list)
+    true_label_dict_probs = confidence(grouped_data, labeled_data, true_label_dict_probs)
+
+    grouped_data = {0:[(1,0.6),(0,0.211)], 1:[(1,0.111),(0,0.8)]}
+    labeled_data = {0:1,1:0}
+    true_label_dict_probs = confidence(grouped_data, labeled_data, true_label_dict_probs)
+
+    true_avg_dict_probs = defaultdict(float)
+    for sentence_id in true_label_dict_probs:
+        true_avg_dict_probs[sentence_id] = np.mean(true_label_dict_probs[sentence_id])
+
     a=1
+    '''
+    grouped_data: {sentence_id:[ [(option_id_epoch_0, prob_epoch_0)],  [(option_id_epoch_0, prob_epoch_0)]]}
+    labeled_data: {sentence_id:corrept_option_id}
+    true_label_dict_probs: {sentence_id: [probs_epoch_0,probs_epoch_1]}
+    '''
+
+    # true_label_dict_avg_probs = defaultdict(float)
+    # for sentence_id in true_label_prob:
+    #     true_label_dict_avg_probs[sentence_id] = np.mean(true_label_prob[sentence_id])
+
+    # # just for check
+    # # grouped_data = {1:[(1,0.4), (3,0.7)], 2:[(3,0.8),(2,0.5)]}
+    # # an = sort_grouped_data(grouped_data)
+    # sentence_ids = torch.tensor([0,1,0,1,0,1,0,1])
+    # option_ids = torch.tensor([1,2,0,1,2,3,3,0])
+    # preds = torch.tensor([[0,0.99],[0,0.99],[1,0],[1,0],[1,0],[1,0],[0.1,0.9],[0.4,0.6]])
+    # labels = torch.tensor([0,0,0,0,0,0,1,1])
+    # assert (len(sentence_ids) == len(option_ids) == len(preds) == len(labels))
+    # grouped_data, labeled_data = group_data(sentence_ids, option_ids, preds, labels)
+    # sorted_data = sort_grouped_data(grouped_data)
+    # r_1, r_2, mrr = calculate_IR_metrics(sorted_data, labeled_data)
+    # a=1
