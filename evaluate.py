@@ -2,13 +2,14 @@ import json
 import os
 import torch
 from utils import set_seed, get_checkpoint_name
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, DataCollatorWithPadding
+#from transformers import AutoTokenizer, AutoModelForSequenceClassification, DataCollatorWithPadding
 from torch.nn import functional as F
 from collections import defaultdict
 from utils import calculate_IR_metrics
 from data import load_all_samples
 from torch.utils.data import DataLoader
 import numpy as np
+import math
 
 def evaluate_data(model, data_loader, config, device):
 
@@ -69,6 +70,49 @@ def confidence(grouped_data, labeled_data, true_label_dict_probs):
 
  
     return true_label_dict_probs
+
+'''grouped_data = {0:[(1,0.6),(0,0.211)], 1:[(1,0.111),(0,0.8)]}
+labeled_data = {0:1,1:0}
+true_label_dict_probs = defaultdict(list)'''
+
+def correctness(grouped_data, labeled_data, true_pred_dict_probs):
+    '''the fraction of times the
+    model correctly labels xi across epochs, named
+    correctness; this score only has 1 + E possible
+    values. Intuitively, a high-confidence instance is
+    “easier” for the given learner
+    
+    ιδια φιλοσοφια με απο πανω απλα 0 η 1 αναλογα αν το HIgher pred ηταν για το σωστο και μετα θα γινει avg over epochs
+    true_label_dict_probs: {sentence_id: [correct_epoch_0, correct_epoch_1]}'''
+
+    max_scores = {key: max(value, key=lambda x: x[1])[0] for key, value in grouped_data.items()}
+    for sentence_id, pred in max_scores.items():
+        correct_option_id = labeled_data[sentence_id]
+        if pred == correct_option_id:
+            true_label_asserted = 1 if pred == correct_option_id else 0
+
+            true_pred_dict_probs[sentence_id].append(true_label_asserted)            
+    
+    return true_pred_dict_probs
+
+def variability_numerators(confidence, grouped_data, labeled_data, numerators):
+    '''measures the spread of p across epochs using std
+    grouped_data: {sentence_id:[(option_id_epoch_0, prob_epoch_0)]]}
+    labeled_data: {sentence_id:corrept_option_id}
+    true_label_dict_probs: {sentence_id: [probs_epoch_0,probs_epoch_1]}'''
+    
+    for sentence_id in grouped_data:
+        option_probs_pairs = grouped_data[sentence_id]
+        correct_option_id = labeled_data[sentence_id]
+        for option_id, prob in option_probs_pairs:
+            if option_id == correct_option_id:
+                true_label_prob = prob
+                numerator = (true_label_prob - confidence[sentence_id])**2
+                numerators[sentence_id].append(numerator)
+
+    return numerators
+
+
 
 def group_data(sentence_ids, option_ids, probabilities, labels):
     grouped_data = defaultdict(list) # {sentence_id : [(option_id, predict_positive_prob),..]}
@@ -146,15 +190,35 @@ if __name__ == "__main__":
     grouped_data = {0:[(1,0.4),(0,0.2)], 1:[(1,0.1),(0,0.6)]}
     labeled_data = {0:1,1:0}
     true_label_dict_probs = defaultdict(list)
+    true_pred_dict_probs = defaultdict(list)
+    numerators = defaultdict(list)
+
     true_label_dict_probs = confidence(grouped_data, labeled_data, true_label_dict_probs)
+    true_pred_dict_probs = correctness(grouped_data, labeled_data, true_pred_dict_probs)
 
     grouped_data = {0:[(1,0.6),(0,0.211)], 1:[(1,0.111),(0,0.8)]}
     labeled_data = {0:1,1:0}
     true_label_dict_probs = confidence(grouped_data, labeled_data, true_label_dict_probs)
+    true_pred_dict_probs = correctness(grouped_data, labeled_data, true_pred_dict_probs)
 
     true_avg_dict_probs = defaultdict(float)
+    true_avg_dict_preds = defaultdict(float)
     for sentence_id in true_label_dict_probs:
         true_avg_dict_probs[sentence_id] = np.mean(true_label_dict_probs[sentence_id])
+
+    for sentence_id in true_pred_dict_probs:
+        true_avg_dict_preds[sentence_id] = np.mean(true_pred_dict_probs[sentence_id])
+    
+    avg_numerators = defaultdict(float)
+    for sentence_id in numerators:
+        avg_numerators[sentence_id] = np.mean(numerators[sentence_id])
+
+    num_epochs = 10
+    std = math.sqrt(avg_numerators / num_epochs)
+
+    print(true_pred_dict_probs)
+    print(true_avg_dict_preds)
+    
 
     a=1
     '''
