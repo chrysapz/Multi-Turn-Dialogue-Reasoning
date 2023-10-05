@@ -7,22 +7,23 @@ from transformers import BitsAndBytesConfig, AutoTokenizer, \
 from peft import (LoraConfig, TaskType, get_peft_model,
                   prepare_model_for_int8_training)
 from torch.utils.data import DataLoader
-from utils import set_seed, get_checkpoint_name
+from utils import set_seed
 from data import load_all_samples
-from mutual_dataset import MutualDataset
 import matplotlib.pyplot as plt
 from llama_tokenize import Llama_dataset, Llama_with_sent_ids_dataset
 from llama_collator import LLama_DataCollatorForLanguageModeling
 import random
 import pickle
 import argparse
+from tqdm import tqdm
 #! you need pip install accelerate bitsandbytes
 
 def generate_and_collect_info(trainer, dev_loader, tokenizer, device, LORA_R):
     generated_info = [] # [ (sentence_id, generated_text, perplexity) ]
+    generate_info_without_hello = [] # [ (sentence_id, generated_text, perplexity) ]
     with torch.no_grad():
-        for batch in dev_loader:
-            inputs = {key: value.to(device) for key, value in batch.items() if key not in ['sentences_id']} #sentence_id is useful only for metrics
+        for batch in tqdm(dev_loader):
+            inputs = {key: value.to(device) for key, value in batch.items() if key not in ['sentences_id','is_dummy']} #sentence_id is useful only for metrics
             inputs.pop('labels')
 
             outputs_ids = trainer.model.generate( 
@@ -55,12 +56,17 @@ def generate_and_collect_info(trainer, dev_loader, tokenizer, device, LORA_R):
 
             batch_generated_text = tokenizer.batch_decode(generated_tokens_ids[:, -30:], skip_special_tokens=True)
 
-            generated_info.extend([(sent_id.item(), gen_text, perpl) for gen_text, perpl, sent_id in zip(batch_generated_text, perplexity, 
-                                                                                                  batch['sentences_id'])])
+            
+            generate_info_without_hello.extend([(sent_id.item(), gen_text, perpl.item()) for gen_text, perpl, sent_id, without_dummy in zip(batch_generated_text, perplexity, batch['sentences_id'], batch['without_dummy']) if without_dummy.item()])
+            generated_info.extend([(sent_id.item(), gen_text, perpl.item()) for gen_text, perpl, sent_id, without_dummy in zip(batch_generated_text, perplexity, batch['sentences_id'], batch['without_dummy']) if not without_dummy.item()])
     
     # Save index_list to a binary file
     with open(f'inference_info_r_{LORA_R}.pkl', 'wb') as file:
         pickle.dump(generated_info, file)
+
+    # Save index_list to a binary file
+    with open(f'without_hello_inference_info_r_{LORA_R}.pkl', 'wb') as file:
+        pickle.dump(generate_info_without_hello, file)
 
 def print_args(args):
     # Step 4: Print the parsed arguments
@@ -101,6 +107,7 @@ def main(args):
     print('Training')
     print_args(args)
     config = vars(args) # convert to dict
+    # config['debug'] = True
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -203,7 +210,7 @@ def load_config(path):
         config = json.load(file)
     return config
 
-#! In gpu without any arguments only 0-shot evalutation will be done and in 8bits
+#! In gpu without any arguments only 0-shot evalutation will be done and in 8bits. You won't be in debug mode
 def parse_option():
     parser = argparse.ArgumentParser(description="LLama parser")
     

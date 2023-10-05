@@ -41,11 +41,12 @@ class Llama_dataset(data.Dataset):
     
     def __init__(self, tokenizer: AutoTokenizer, split_samples, do_generate):
         self.tokenizer = tokenizer
-        dialogs, all_answers = self.text2dialogformat(split_samples)
+        dialogs, all_answers, without_dummy_flag = self.text2dialogformat(split_samples)
         all_input_ids, all_attention_masks, all_labels = self.tokenize_text(dialogs, all_answers, do_generate)
         self.all_input_ids = all_input_ids
         self.all_attention_masks = all_attention_masks
         self.all_labels = all_labels
+        self.without_dummy_flag = without_dummy_flag
 
     def __len__(self):
         # Number of data point we have
@@ -57,7 +58,6 @@ class Llama_dataset(data.Dataset):
         input_ids = self.all_input_ids[idx]
         attention_mask = self.all_attention_masks[idx]
         label = self.all_labels[idx]
-        
         # return input_ids, attention_mask, label
         return input_ids, attention_mask, label
         # return {"input_ids": input_ids, 'attention_mask':attention_mask,'labels': label}
@@ -79,6 +79,7 @@ class Llama_dataset(data.Dataset):
         # see here about how to preprocess https://huggingface.co/meta-llama/Llama-2-7b-chat
         all_dialogs = []
         all_answers = []
+        without_dummy_flag = [] # 
         for label_id, options, initial_context_history in sentences:
             unprocessed_correct_option = options[label_id]
 
@@ -107,6 +108,7 @@ class Llama_dataset(data.Dataset):
             sorted_positions = sorted(m_positions+f_positions)
             all_turns = []
             if len(sorted_positions) % 2 != 0: # if odd user assistant user
+                without_dummy_flag.append(1)
                 for i, pos in enumerate(sorted_positions):
                     role = 'user'  if i % 2==0 else 'assistant'
 
@@ -115,6 +117,7 @@ class Llama_dataset(data.Dataset):
                     turn_dict = {'role': role, 'content': context_history[pos+4 : next_pos] }
                     all_turns.append(turn_dict)
             else: # if even assistant user assistant user
+                without_dummy_flag.append(0)
                 dummy_hello = {'role': 'user', 'content': 'Hello . \n' }
                 all_turns.append(dummy_hello)
                 for i, pos in enumerate(sorted_positions):
@@ -127,7 +130,7 @@ class Llama_dataset(data.Dataset):
 
             all_dialogs.append(all_turns)
         
-        return all_dialogs, all_answers
+        return all_dialogs, all_answers, without_dummy_flag
 
     def tokenize_add(self, prompt, answer):
         #! always pairs
@@ -226,12 +229,11 @@ class Llama_with_sent_ids_dataset(Llama_dataset):
         self.all_sentences_id = all_sentences_id
 
     def __getitem__(self, idx):
-        input_ids, attention_mask, label = super().__getitem__(idx)
+        input_ids = self.all_input_ids[idx]
+        attention_mask = self.all_attention_masks[idx]
+        label = self.all_labels[idx]
         sentence_id = self.all_sentences_id[idx]
-        return input_ids, attention_mask, label, sentence_id
+        without_dummy = self.without_dummy_flag[idx]
 
-# if __name__=='__main__':
-#     [{'role':'user','content':'first text user1'}, {'role':'assistant','content':'first text user 2'}]
-#     tokenizer = AutoTokenizer.from_pretrained('meta-llama/Llama-2-7b')
-#     llama_preprocesing = Llama_dataset(tokenizer)
-#     llama_preprocesing.tokenize_text('')
+        return input_ids, attention_mask, label, sentence_id, without_dummy
+

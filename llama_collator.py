@@ -42,10 +42,11 @@ class LLama_DataCollatorForLanguageModeling(DataCollatorForLanguageModeling):
     
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         batch = {}
-        if len(examples[0]) == 4: # useful only when using model.generate
-            input_ids, attention_masks, labels, sentences_id = zip(*examples)
+        if len(examples[0]) == 5: # useful only when using model.generate
+            input_ids, attention_masks, labels, sentences_id, without_dummy = zip(*examples)
             sentences_id = torch.tensor(sentences_id)
             batch['sentences_id'] = sentences_id
+            batch['without_dummy'] = torch.tensor(without_dummy)
         elif len(examples[0]) == 3:
             input_ids, attention_masks, labels = zip(*examples)
 
