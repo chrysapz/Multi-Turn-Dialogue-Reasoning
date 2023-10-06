@@ -35,6 +35,7 @@ def evaluate_data(model, data_loader, config, device):
         and Mean Reciprocal Rank (MRR) if not in debug mode. 
     """
     model.eval()
+    print('Evaluate...')
     total_loss = 0
     labels = []
     preds = []
