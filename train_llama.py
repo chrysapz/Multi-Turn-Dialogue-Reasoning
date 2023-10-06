@@ -143,7 +143,7 @@ def main(config):
         seed=config['seed'],
         evaluation_strategy='epoch',
         save_strategy ='epoch',
-        metric_for_best_model="train_loss",
+        metric_for_best_model="loss",
         greater_is_better = False
     )
 
