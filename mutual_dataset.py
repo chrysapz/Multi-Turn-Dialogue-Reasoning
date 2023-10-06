@@ -1,7 +1,26 @@
 import torch.utils.data as data
 
 class MutualDataset(data.Dataset):
+    """
+    Custom PyTorch Dataset for tokenizing data for a binary classification task using a RoBERTa-based model.
+    This dataset takes a list of samples, tokenizes them, and prepares them for model input.
 
+    Args:
+        split_samples (list): A list of tuples, where each tuple contains:
+            a. label_id (int): The index of the correct option.
+            b. options (list): A list of strings representing answer options.
+            c. context_history (str): The context history.
+        tokenizer (transformers.AutoTokenizer): The tokenizer for tokenizing the input text.
+        max_seq_length (int): The maximum sequence length for tokenized inputs.
+
+    Attributes:
+        input_ids (list): A list of lists of token IDs representing the tokenized inputs.
+        attention_mask (list): A list of lists of attention masks for tokenized inputs.
+        labels (list): A list of binary flags (0 or 1) indicating whether each option is correct.
+        sentence_ids (list): A list of sentence IDs (numbers) corresponding to each tokenized input.
+        option_ids (list): A list of option IDs (numbers) corresponding to each tokenized input.
+
+    """
     def __init__(self, split_samples, tokenizer, max_seq_length):
         super().__init__()
 
@@ -14,12 +33,31 @@ class MutualDataset(data.Dataset):
         self.option_ids = option_ids
 
     def __len__(self):
-        # Number of data point we have
+        """
+        Returns the number of data points in the dataset.
+
+        Returns:
+            int: The number of data points.
+        """
         return len(self.labels)
 
     def __getitem__(self, idx):
-        # Return the idx-th data point of the dataset
-        # If we have multiple things to return (data point and label), we can return them as tuple
+        """
+        Returns the idx-th data point of the dataset.
+
+        Args:
+            idx (int): The index of the data point to retrieve.
+
+        Returns:
+                tuple: A tuple containing the following lists:
+                    a. "input_ids" (list): List of token IDs for the input.
+                    b. "labels" (int): Binary flag (0 or 1) indicating correctness of the option. 
+                    c. "attention_mask" (list): List of attention masks for input tokens. 
+                    d. "sentence_id" (int): Sentence ID corresponding to the data point. 
+                    e. "option_id" (int): Option ID corresponding to the option which is concatenated to the input. 
+
+        """ 
+
         input_ids = self.input_ids[idx]
         attention_mask = self.attention_mask[idx]
         label = self.labels[idx]
@@ -31,19 +69,27 @@ class MutualDataset(data.Dataset):
 
     def tokenize_roberta_data(self, data, tokenizer, max_seq_length):
         """
-        We feed into BERT and do binary classification:
-            history, option_1 -> BERT -> (p, 1-p) loss
-            history, option_2 -> BERT -> (p, 1-p) loss
-            etc. seperately 
+        Tokenize input data for a binary classification task using a RoBERTa-based model.
+        We consider as input to the RoBERTa model the concatenation of the context history and a possible option
 
-        Alternatively, we could 
-            history, option_1 -> BERT -> (p_1, 1-p) 
-            history, option_2 -> BERT -> (p_2, 1-p) 
-            etc. for options 3, 4 
+        Args:
+            data (list): A list of tuples, where each tuple contains:
+                a. label_id (int): The index of the correct option.
+                b. options (list): A list of strings representing answer options.
+                c. context_history (str): The context history.
 
-            one loss function (p_1, p_2, p_3, p_4) where first element always the true label
+            tokenizer (transformers.AutoTokenizer): The tokenizer for tokenizing the input text.
+            max_seq_length (int): The maximum sequence length for tokenized inputs.
 
-        """
+        Returns:
+            tuple: A tuple containing the following lists:
+                a. tokenized_input_ids (list): A list of lists of token IDs representing the tokenized inputs.
+                b. tokenized_attention_mask (list): A list of lists of attention masks for tokenized inputs.
+                c. option_flags (list): A list of binary flags (0 or 1) indicating whether each option is correct.
+                d. sentences_id (list): A list of sentence IDs (numbers) corresponding to each tokenized input.
+                e. options_id (list): A list of option IDs (numbers) corresponding to each tokenized input.
+
+            """
 
         tokenized_input_ids = []
         tokenized_attention_mask = []
