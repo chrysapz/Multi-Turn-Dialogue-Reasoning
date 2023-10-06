@@ -30,6 +30,7 @@ def generate_and_collect_info(trainer, dev_loader, tokenizer, device, LORA_R):
                 return_dict_in_generate=True,
                 temperature = 1
             )
+            
 
             generated_tokens_ids = outputs_ids['sequences'] #(batch_size, input_length+max_new_tokens)
             generated_scores = outputs_ids['scores'] #it's a tuple of len max_new_tokens where each (batch_size, vocab_size)
@@ -44,14 +45,17 @@ def generate_and_collect_info(trainer, dev_loader, tokenizer, device, LORA_R):
             generated_tokens_ids = torch.tensor(generated_tokens_ids)
 
             # Gather the probabilities of the generated tokens
-            actual_probs = torch.gather(probs.permute(1,0,2), 2, generated_tokens_ids[:,-30:].unsqueeze(-1)).squeeze(dim=-1)
+            print(generated_tokens_ids.size())
+            print(probs.size())
+            print("------")
+            actual_probs = torch.gather(probs.permute(1,0,2), 2, generated_tokens_ids[:,-29:].unsqueeze(-1)).squeeze(dim=-1)
 
             # Calculate the negative log likelihood for each sequence in the batch
             nll_per_sequence = -torch.log(actual_probs).sum(dim=1)
 
             perplexity = torch.exp(nll_per_sequence)
 
-            batch_generated_text = tokenizer.batch_decode(generated_tokens_ids[:, -30:], skip_special_tokens=True)
+            batch_generated_text = tokenizer.batch_decode(generated_tokens_ids[:, -29:], skip_special_tokens=True)
 
             generated_info.extend([(sent_id.item(), gen_text, perpl) for gen_text, perpl, sent_id in zip(batch_generated_text, perplexity, 
                                                                                                   batch['sentences_id'])])
@@ -107,7 +111,7 @@ def main(config):
 
     if not config['debug']:
         model = AutoModelForCausalLM.from_pretrained(config['model_name'], token = MY_TOKEN, load_in_8bit=True, device_map="auto")
-    model = model.to(device)
+    model = model
     model.resize_token_embeddings(model.config.vocab_size + 1)
 
     # #quaa
@@ -139,7 +143,8 @@ def main(config):
         seed=config['seed'],
         evaluation_strategy='epoch',
         save_strategy ='epoch',
-        metric_for_best_model="eval_loss"
+        metric_for_best_model="train_loss",
+        greater_is_better = False
     )
 
 
@@ -150,7 +155,7 @@ def main(config):
     
     trainer.model.eval()
 
-    DEV_BATCH_SIZE = 16
+    DEV_BATCH_SIZE = 8
     dev_dataset = Llama_with_sent_ids_dataset(tokenizer, dev_samples, do_generate=True,dev_ids= indexed_train_list[FINETUNE_SIZE:FINETUNE_SIZE+FINETUNE_SIZE])
     dev_loader = DataLoader(dev_dataset, shuffle=False, batch_size=DEV_BATCH_SIZE, collate_fn=dev_collate_fn)
     print('Inference...')

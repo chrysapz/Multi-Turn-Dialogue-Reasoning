@@ -1,0 +1,41 @@
+***************************************************************************************************** 
+* WARNING: The 2021 software stack is not available on the 'genoa' partition.
+Please use the 2022 * 
+* software stack. * 
+* * 
+* If you have any question, please contact us via
+http://servicedesk.surfsara.nl. * 
+***************************************************************************************************** 
+Training
+{'mode': 'llama', 'data_dir': 'data', 'out_dir': 'checkpoints', 'dataset_name': 'mutual', 'model_name': 'meta-llama/Llama-2-7b-hf', 'tokenizer_name': 'meta-llama/Llama-2-7b-hf', 'max_seq_length': 256, 'batch_size': 8, 'learning_rate': 0.0005, 'epochs': 3, 'weight_decay': 0.0, 'seed': 0, 'adam_epsilon': 1e-08, 'warmup_steps': 0, 'max_grad_norm': 1.0, 'calculate_probs': True, 'debug': False}
+cuda  device!!!!
+ 0 times last message from assistant
+ 0 times last message from assistant
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:05<00:05,  5.22s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:07<00:00,  3.22s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:07<00:00,  3.52s/it]
+/home/scur0652/.conda/envs/nlp/lib/python3.11/site-packages/transformers/utils/hub.py:374: FutureWarning: The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.
+  warnings.warn(
+You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embedding dimension will be 32001. This might induce some performance reduction as *Tensor Cores* will not be available. For more details about this, or help on choosing the correct value for resizing, refer to this guide: https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
+/home/scur0652/.conda/envs/nlp/lib/python3.11/site-packages/peft/utils/other.py:122: FutureWarning: prepare_model_for_int8_training is deprecated and will be removed in a future version. Use prepare_model_for_kbit_training instead.
+  warnings.warn(
+trainable params: 8,388,608 || all params: 6,746,812,416 || trainable%: 0.12433438908285782
+Training...
+  0%|          | 0/375 [00:00<?, ?it/s]`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`...
+/home/scur0652/.conda/envs/nlp/lib/python3.11/site-packages/bitsandbytes/autograd/_functions.py:322: UserWarning: MatMul8bitLt: inputs will be cast from torch.float32 to float16 during quantization
+  warnings.warn(f"MatMul8bitLt: inputs will be cast from {A.dtype} to float16 during quantization")
+  0%|          | 1/375 [00:03<23:38,  3.79s/it]  1%|          | 2/375 [00:09<31:02,  4.99s/it]  1%|          | 3/375 [00:12<26:06,  4.21s/it]  1%|          | 4/375 [00:15<21:45,  3.52s/it]  1%|▏         | 5/375 [00:18<20:23,  3.31s/it]  2%|▏         | 6/375 [00:20<18:10,  2.95s/it]  2%|▏         | 7/375 [00:25<21:09,  3.45s/it]  2%|▏         | 8/375 [00:28<20:46,  3.40s/it]slurmstepd: error: *** JOB 4003390 ON gcn64 CANCELLED AT 2023-10-04T13:15:13 DUE TO TIME LIMIT ***
+slurmstepd: error: container_p_join: setns failed for /slurm/4003390/.ns: Invalid argument
+slurmstepd: error: container_g_join(4003390): Invalid argument
+
+JOB STATISTICS
+==============
+Job ID: 4003390
+Cluster: snellius
+User/Group: scur0652/scur0652
+State: TIMEOUT (exit code 0)
+Nodes: 1
+Cores per node: 18
+CPU Utilized: 00:00:01
+CPU Efficiency: 0.08% of 00:20:06 core-walltime
+Job Wall-clock time: 00:01:07
+Memory Utilized: 1018.45 MB
+Memory Efficiency: 3.18% of 31.25 GB

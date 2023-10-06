@@ -1,0 +1,20 @@
+#!/bin/bash
+
+
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
+#SBATCH --job-name=lamma
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=3
+#SBATCH --time=00:25:00
+#SBATCH --mem=32000M
+#SBATCH --output=jobs/slurm_output/test_%A.out
+
+
+module purge
+module load 2021
+module load Anaconda3/2021.05
+
+cd $HOME/dl4nlp/Multi-Turn-Dialogue-Reasoning
+source activate nlp
+srun python -u $HOME/dl4nlp/Multi-Turn-Dialogue-Reasoning/baseline/multi-choice/run_multiple_choice.py --do_eval 

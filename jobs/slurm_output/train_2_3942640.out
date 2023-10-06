@@ -1,0 +1,26 @@
+***************************************************************************************************** 
+* WARNING: The 2021 software stack is not available on the 'genoa' partition.
+Please use the 2022 * 
+* software stack. * 
+* * 
+* If you have any question, please contact us via
+http://servicedesk.surfsara.nl. * 
+***************************************************************************************************** 
+slurmstepd: error: execve(): puthon: No such file or directory
+srun: error: gcn14: task 0: Exited with exit code 2
+srun: Terminating StepId=3942640.0
+
+JOB STATISTICS
+==============
+Job ID: 3942640
+Cluster: snellius
+User/Group: scur0652/scur0652
+State: RUNNING
+Nodes: 1
+Cores per node: 18
+CPU Utilized: 00:00:00
+CPU Efficiency: 0.00% of 00:02:24 core-walltime
+Job Wall-clock time: 00:00:08
+Memory Utilized: 0.00 MB (estimated maximum)
+Memory Efficiency: 0.00% of 31.25 GB (31.25 GB/node)
+WARNING: Efficiency statistics may be misleading for RUNNING jobs.

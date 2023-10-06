@@ -1,0 +1,44 @@
+***************************************************************************************************** 
+* WARNING: The 2021 software stack is not available on the 'genoa' partition.
+Please use the 2022 * 
+* software stack. * 
+* * 
+* If you have any question, please contact us via
+http://servicedesk.surfsara.nl. * 
+***************************************************************************************************** 
+Training
+{'mode': 'llama', 'data_dir': 'data', 'out_dir': 'checkpoints', 'dataset_name': 'mutual', 'model_name': 'meta-llama/Llama-2-7b-hf', 'tokenizer_name': 'meta-llama/Llama-2-7b-hf', 'max_seq_length': 256, 'batch_size': 8, 'learning_rate': 0.0005, 'epochs': 5, 'weight_decay': 0.0, 'seed': 0, 'adam_epsilon': 1e-08, 'warmup_steps': 0, 'max_grad_norm': 1.0, 'calculate_probs': True, 'debug': False, 'hf_token': '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', 'rank': 16, 'lora_alpha': 32, 'lora_dropout': 0.1}
+cuda  device!!!!
+ 0 times last message from assistant
+dev
+ 0 times last message from assistant
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:16<00:16, 16.13s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:22<00:00, 10.10s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:22<00:00, 11.01s/it]
+/home/scur0652/.conda/envs/nlp/lib/python3.11/site-packages/transformers/utils/hub.py:374: FutureWarning: The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.
+  warnings.warn(
+You shouldn't move a model when it is dispatched on multiple devices.
+Traceback (most recent call last):
+  File "/home/scur0652/dl4nlp/Multi-Turn-Dialogue-Reasoning/train_llama.py", line 168, in <module>
+    main(config)
+  File "/home/scur0652/dl4nlp/Multi-Turn-Dialogue-Reasoning/train_llama.py", line 110, in main
+    model = model.to(device)
+            ^^^^^^^^^^^^^^^^
+  File "/home/scur0652/.conda/envs/nlp/lib/python3.11/site-packages/accelerate/big_modeling.py", line 416, in wrapper
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/scur0652/.conda/envs/nlp/lib/python3.11/site-packages/transformers/modeling_utils.py", line 2060, in to
+    raise ValueError(
+ValueError: `.to` is not supported for `4-bit` or `8-bit` bitsandbytes models. Please use the model as it is, since the model has already been set to the correct devices and casted to the correct `dtype`.
+
+JOB STATISTICS
+==============
+Job ID: 4011067
+Cluster: snellius
+User/Group: scur0652/scur0652
+State: FAILED (exit code 1)
+Nodes: 1
+Cores per node: 18
+CPU Utilized: 00:00:48
+CPU Efficiency: 2.78% of 00:28:48 core-walltime
+Job Wall-clock time: 00:01:36
+Memory Utilized: 439.14 MB
+Memory Efficiency: 1.37% of 31.25 GB

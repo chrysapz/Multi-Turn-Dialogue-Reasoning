@@ -1,0 +1,41 @@
+***************************************************************************************************** 
+* WARNING: The 2021 software stack is not available on the 'genoa' partition.
+Please use the 2022 * 
+* software stack. * 
+* * 
+* If you have any question, please contact us via
+http://servicedesk.surfsara.nl. * 
+***************************************************************************************************** 
+Training
+{'mode': 'llama', 'data_dir': 'data', 'out_dir': 'checkpoints', 'dataset_name': 'mutual', 'model_name': 'meta-llama/Llama-2-7b-hf', 'tokenizer_name': 'meta-llama/Llama-2-7b-hf', 'max_seq_length': 256, 'batch_size': 16, 'learning_rate': 0.0005, 'epochs': 3, 'weight_decay': 0.0, 'seed': 0, 'adam_epsilon': 1e-08, 'warmup_steps': 0, 'max_grad_norm': 1.0, 'calculate_probs': True, 'debug': False}
+cuda  device!!!!
+ 0 times last message from assistant
+ 0 times last message from assistant
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:12<00:12, 12.51s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:16<00:00,  7.71s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:16<00:00,  8.43s/it]
+/home/scur0652/.conda/envs/nlp/lib/python3.11/site-packages/transformers/utils/hub.py:374: FutureWarning: The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.
+  warnings.warn(
+You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embedding dimension will be 32001. This might induce some performance reduction as *Tensor Cores* will not be available. For more details about this, or help on choosing the correct value for resizing, refer to this guide: https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
+/home/scur0652/.conda/envs/nlp/lib/python3.11/site-packages/peft/utils/other.py:122: FutureWarning: prepare_model_for_int8_training is deprecated and will be removed in a future version. Use prepare_model_for_kbit_training instead.
+  warnings.warn(
+trainable params: 8,388,608 || all params: 6,746,812,416 || trainable%: 0.12433438908285782
+Training...
+  0%|          | 0/21 [00:00<?, ?it/s]`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`...
+/home/scur0652/.conda/envs/nlp/lib/python3.11/site-packages/bitsandbytes/autograd/_functions.py:322: UserWarning: MatMul8bitLt: inputs will be cast from torch.float32 to float16 during quantization
+  warnings.warn(f"MatMul8bitLt: inputs will be cast from {A.dtype} to float16 during quantization")
+  5%|▍         | 1/21 [00:07<02:25,  7.28s/it] 10%|▉         | 2/21 [00:14<02:20,  7.42s/it] 14%|█▍        | 3/21 [00:22<02:18,  7.67s/it] 19%|█▉        | 4/21 [00:29<02:00,  7.11s/it] 24%|██▍       | 5/21 [00:37<02:00,  7.53s/it] 29%|██▊       | 6/21 [00:44<01:53,  7.54s/it] 33%|███▎      | 7/21 [00:46<01:18,  5.64s/it] 38%|███▊      | 8/21 [00:53<01:19,  6.12s/it] 43%|████▎     | 9/21 [01:02<01:21,  6.80s/it] 48%|████▊     | 10/21 [01:09<01:18,  7.16s/it] 52%|█████▏    | 11/21 [01:15<01:06,  6.61s/it] 57%|█████▋    | 12/21 [01:21<00:57,  6.40s/it] 62%|██████▏   | 13/21 [01:28<00:53,  6.74s/it] 67%|██████▋   | 14/21 [01:31<00:37,  5.38s/it] 71%|███████▏  | 15/21 [01:39<00:37,  6.26s/it] 76%|███████▌  | 16/21 [01:46<00:33,  6.64s/it] 81%|████████  | 17/21 [01:53<00:26,  6.57s/it] 86%|████████▌ | 18/21 [02:00<00:20,  6.86s/it] 90%|█████████ | 19/21 [02:06<00:13,  6.51s/it] 95%|█████████▌| 20/21 [02:12<00:06,  6.24s/it]100%|██████████| 21/21 [02:14<00:00,  5.01s/it]                                               {'train_runtime': 134.2731, 'train_samples_per_second': 2.234, 'train_steps_per_second': 0.156, 'train_loss': 1.6082382202148438, 'epoch': 3.0}
+100%|██████████| 21/21 [02:14<00:00,  5.01s/it]100%|██████████| 21/21 [02:14<00:00,  6.39s/it]
+
+JOB STATISTICS
+==============
+Job ID: 4003543
+Cluster: snellius
+User/Group: scur0652/scur0652
+State: RUNNING
+Nodes: 1
+Cores per node: 18
+CPU Utilized: 00:00:00
+CPU Efficiency: 0.00% of 00:58:12 core-walltime
+Job Wall-clock time: 00:03:14
+Memory Utilized: 0.00 MB (estimated maximum)
+Memory Efficiency: 0.00% of 31.25 GB (31.25 GB/node)
+WARNING: Efficiency statistics may be misleading for RUNNING jobs.

@@ -3,3 +3,10 @@ __pycache__/
 *.png
 .env
 checkpoints
+checkpoint-3500
+data
+output
+baseline
+output
+runs
+jobs/jobs/slurm_output
