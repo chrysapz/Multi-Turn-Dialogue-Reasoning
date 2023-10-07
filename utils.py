@@ -3,6 +3,7 @@ import numpy as np
 import datetime
 import random
 from collections import defaultdict
+import pickle
 
 # see https://github.com/Nealcly/MuTual/blob/master/eval_sample/eval.py
 def set_seed(seed):
@@ -37,6 +38,23 @@ def get_checkpoint_name(config):
 
     print('date info ', date_info)
     return config_name
+
+def print_args(args):
+    print("Parsed Arguments:")
+    for arg in vars(args):
+        print(f"{arg}: {getattr(args, arg)}")
+
+def create_pickle(obj, filename):
+    """
+    Pickle (serialize) a Python object and save it to a file.
+
+    Args:
+        obj: The Python object to be pickled.
+        filename (str): The name of the file where the pickled object will be saved.
+    """
+    
+    with open(filename, 'wb') as file:
+        pickle.dump(obj, file)
 
 def RPF1(grouped_data, labeled_data):
 

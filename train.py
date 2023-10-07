@@ -15,10 +15,11 @@ from evaluate import evaluate_data, calculate_probs, group_data, sort_grouped_da
 from time import gmtime, strftime
 from tqdm import tqdm
 from collections import defaultdict
-from utils import calculate_true_label_probs, count_true_label_correct, calculate_mean, calculate_variability
+from utils import calculate_true_label_probs, count_true_label_correct, calculate_mean, calculate_variability, print_args, create_pickle
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+import argparse
+import pickle
+
 
 def train(model, train_loader, dev_loader, optimizer, config, device):
     """
@@ -100,10 +101,11 @@ def train(model, train_loader, dev_loader, optimizer, config, device):
         print(f"Epoch {epoch+1}/{epochs} | Training Loss: {avg_train_loss}")
 
         eval_preds, eval_labels, eval_loss, metrics = evaluate_data(model, dev_loader, config, device)
-        if metrics['r1'] > best_r1:
+        if metrics['r1'] > best_r1 or config['debug']:
             best_model = deepcopy(model)
             best_epoch = epoch
             best_optimizer = deepcopy(optimizer)
+            best_r1 = metrics['r1']
     
     confidence = calculate_mean(true_label_dict_probs)
     variability = calculate_variability(true_label_dict_probs, confidence)
@@ -114,118 +116,49 @@ def train(model, train_loader, dev_loader, optimizer, config, device):
     df['confidence'] = df['sentence_id'].map(confidence)
     df['variability'] = df['sentence_id'].map(variability)
 
-    best_model_info = {'model_state_dict': best_model.state_dict(), 'epoch':best_epoch,'optimizer_state_dict':best_optimizer.state_dict()}
+    best_model_info = {'model_state_dict': best_model.state_dict(), 'epoch':best_epoch,'optimizer_state_dict':best_optimizer.state_dict(), 'r1':best_r1}
 
     return best_model_info, epoch_loss, confidence, variability, correctness
 
-def plot_maps(dataframe, hue_metric ='correct.', title='', model='RoBERTa', show_hist=False):
-    # Comment out if sub sampling is needed
-    #dataframe = dataframe.sample(n=1000 if dataframe.shape[0] > 25000 else len(dataframe))
-    
-    # Normalize correctness to a value between 0 and 1.
-    dataframe = dataframe.assign(corr_frac = lambda d: d.correctness / d.correctness.max())
-    dataframe['correct.'] = [f"{x:.1f}" for x in dataframe['corr_frac']]
-    
-    main_metric = 'variability'
-    other_metric = 'confidence'
-    
-    hue = hue_metric
-    num_hues = len(dataframe[hue].unique().tolist())
-    style = hue_metric if num_hues < 8 else None
-
-    if not show_hist:
-        fig, axs = plt.subplots(1, 1, figsize=(8, 4))
-        ax0 = axs
-    else:
-        fig = plt.figure(figsize=(16, 10), )
-        gs = fig.add_gridspec(2, 3, height_ratios=[5, 1])
-    
-        ax0 = fig.add_subplot(gs[0, :])
-    
-    
-    ### Make the scatterplot.
-    
-    # Choose a palette.
-    pal = sns.diverging_palette(260, 15, n=num_hues, sep=10, center="dark")
-
-    plot = sns.scatterplot(x=main_metric,
-                           y=other_metric,
-                           ax=ax0,
-                           data=dataframe,
-                           hue=hue,
-                           palette=pal,
-                           style=style,
-                           s=30)
-    
-    # Annotate Regions.
-    bb = lambda c: dict(boxstyle="round,pad=0.3", ec=c, lw=2, fc="white")
-    an1 = ax0.annotate("ambiguous", xy=(0.9, 0.5), xycoords="axes fraction", fontsize=15, color='black',
-                  va="center", ha="center", rotation=350, bbox=bb('black'))
-    an2 = ax0.annotate("easy-to-learn", xy=(0.27, 0.85), xycoords="axes fraction", fontsize=15, color='black',
-                  va="center", ha="center", bbox=bb('r'))
-    an3 = ax0.annotate("hard-to-learn", xy=(0.35, 0.25), xycoords="axes fraction", fontsize=15, color='black',
-                  va="center", ha="center", bbox=bb('b'))
-    
-    if not show_hist:
-        plot.legend(ncol=1, bbox_to_anchor=(1.01, 0.5), loc='center left', fancybox=True, shadow=True)
-    else:
-        plot.legend(fancybox=True, shadow=True,  ncol=1)
-    plot.set_xlabel('variability')
-    plot.set_ylabel('confidence')
-    
-    if show_hist:
-        plot.set_title(f"{model}-{title} Data Map", fontsize=17)
-        
-        # Make the histograms.
-        ax1 = fig.add_subplot(gs[1, 0])
-        ax2 = fig.add_subplot(gs[1, 1])
-        ax3 = fig.add_subplot(gs[1, 2])
-
-        plott0 = dataframe.hist(column=['confidence'], ax=ax1, color='#622a87')
-        plott0[0].set_title('')
-        plott0[0].set_xlabel('confidence')
-        plott0[0].set_ylabel('density')
-
-        plott1 = dataframe.hist(column=['variability'], ax=ax2, color='teal')
-        plott1[0].set_title('')
-        plott1[0].set_xlabel('variability')
-
-        plot2 = sns.countplot(x="correct.", data=dataframe, color='#86bf91', ax=ax3)
-        ax3.xaxis.grid(True) # Show the vertical gridlines
-
-        plot2.set_title('')
-        plot2.set_xlabel('correctness')
-        plot2.set_ylabel('')
-
-    fig.tight_layout()
-
-
 def main(config):
     print('Training')
-    print(config)
-
+    print_args(args)
+    config = vars(args) # convert to dict
+    # config['debug'] = True
     # Set up the data directory and device
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print('device ',device)
     set_seed(config['seed'])
 
     # Load the tokenizer
     tokenizer = RobertaTokenizerFast.from_pretrained(config['tokenizer_name'], use_fast=True)
 
     # Load training and val data
-    train_samples = load_all_samples(base_dir, 'train')
-    dev_samples = load_all_samples(base_dir, 'dev')
+    initial_train_samples = load_all_samples(base_dir, 'train')
+    # Read the serialized data from the file and deserialize it
+    with open('index_list.pkl', 'rb') as file:
+        indexed_train_list = pickle.load(file)
+
+    shuffled_samples = [initial_train_samples[i] for i in indexed_train_list]
+
+    train_samples = shuffled_samples[:6000]
+    dev_samples = shuffled_samples[6000:] 
+
+    test_samples = load_all_samples(base_dir, 'dev')
 
     if config['debug']:
         k = 2
         train_samples = train_samples[:k] # k * num_options in the dataset below
-        dev_samples = dev_samples[:k] # k * num_options in the dataset below
+        dev_samples = dev_samples[:k]
+        test_samples = test_samples[:k] # k * num_options in the dataset below
         config['epochs'] = 2
         config['batch_size'] = 2
 
     # tokenize and create datasets for training and eval datat
     train_dataset = MutualDataset(train_samples, tokenizer, config['max_seq_length'])
     dev_dataset = MutualDataset(dev_samples, tokenizer, config['max_seq_length'])
+    test_dataset = MutualDataset(test_samples, tokenizer, config['max_seq_length'])
 
     # create the model
     model = AutoModelForSequenceClassification.from_pretrained(config['model_name'], num_labels = 2)
@@ -237,6 +170,9 @@ def main(config):
 
     dev_collate_fn = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
     dev_loader = DataLoader(dev_dataset, shuffle=False, batch_size=config['batch_size'], collate_fn=dev_collate_fn)
+
+    dev_collate_fn = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
+    test_loader = DataLoader(test_dataset, shuffle=False, batch_size=config['batch_size'], collate_fn=dev_collate_fn)
 
     # common trick applied also in the paper https://github.com/Nealcly/MuTual/blob/master/baseline/multi-choice/run_multiple_choice.py#L101
     no_decay = ['bias', 'LayerNorm.weight']
@@ -254,19 +190,41 @@ def main(config):
     # Train the model
     model_info, avg_loss, confidence, variability, correctness = train(model, train_loader, dev_loader, optimizer, config, device)
 
-    # Save the model and training loss plot
+    # Save the model
     #! be cautious not to exhaust memory since we save it every time
     if not config['debug']:
         out_dir = config['out_dir']
         checkpoint_name = get_checkpoint_name(config)
         save_folder = os.path.join(out_dir, checkpoint_name)
-        os.makedirs(save_folder)
+        if not os.path.exists(save_folder):
+            os.makedirs(save_folder)
         save_name = os.path.join(save_folder, 'model')
         torch.save(model_info, save_name)
 
+        print('Test...')
+        model = AutoModelForSequenceClassification.from_pretrained(config['model_name'], num_labels = 2)
+        # load the model we just trained
+        checkpoint = torch.load(save_name)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model = model.to(device)
+        evaluate_data(model, test_loader, config, device)
+
+        # save loss
         out_path = os.path.join(save_folder, "training_loss.png")
         plt.plot(avg_loss)
         plt.savefig(out_path)
+
+        # save pickles for confidence, variability and correctness
+        path_confidence_pickle = os.path.join(save_folder, f'confidence.pkl')
+        create_pickle(confidence, path_confidence_pickle)
+
+        path_variability_pickle = os.path.join(save_folder, f'variability.pkl')
+        create_pickle(variability, path_variability_pickle)
+
+        path_correctness_pickle = os.path.join(save_folder, f'correctness.pkl')
+        create_pickle(correctness, path_correctness_pickle)
+
+
 
     # below are just some checks
     # new_model =  AutoModelForSequenceClassification.from_pretrained(config['model_name'], num_labels = 2)
@@ -298,8 +256,38 @@ def load_config(path):
         config = json.load(file)
     return config
 
+def parse_option():
+    # Create an argument parser
+    parser = argparse.ArgumentParser(description="My Argument Parser")
+
+    # Add arguments with default values manually
+    parser.add_argument("--mode", type=str, default="binary")
+    parser.add_argument("--data_dir", type=str, default="data")
+    parser.add_argument("--out_dir", type=str, default="checkpoints")
+    parser.add_argument("--dataset_name", type=str, default="mutual")
+    parser.add_argument("--model_name", type=str, default="roberta-base")
+    parser.add_argument("--tokenizer_name", type=str, default="roberta-base")
+    parser.add_argument("--max_seq_length", type=int, default=256)
+    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--learning_rate", type=float, default=3e-5)
+    parser.add_argument("--epochs", type=int, default=2)
+    parser.add_argument("--weight_decay", type=float, default=0.01)
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--adam_epsilon", type=float, default=1e-8)
+    parser.add_argument("--warmup_steps", type=int, default=0)
+    parser.add_argument("--max_grad_norm", type=float, default=1.0)
+    parser.add_argument("--calculate_probs", type=bool, default=True)
+    parser.add_argument('--debug', action='store_true',help='default is not to debug')
+    #todo
+    parser.add_argument('--repeat', action='store_true',help='default is not to repeat training data')
+    # #todo
+    # parser.add_argument('--augment', action=str,help='default is not to augment training data')
+
+    # Parse the command-line arguments
+    args = parser.parse_args()
+    return args
+
 if __name__ == "__main__":
-    config_path = os.path.join("conf", "config.json")
-    config = load_config(config_path)
-    main(config)
+    args = parse_option()
+    main(args)
     
