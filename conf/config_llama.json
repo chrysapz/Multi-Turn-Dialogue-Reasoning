@@ -1,13 +1,13 @@
 {
     "mode": "llama",
     "data_dir": "data",
-    "out_dir": "checkpoints",
+    "out_dir": "checkpoints-rank-batch",
     "dataset_name": "mutual",
     "model_name": "meta-llama/Llama-2-7b-chat-hf",
     "tokenizer_name": "meta-llama/Llama-2-7b-chat-hf",
     "max_seq_length": 256,
-    "batch_size": 8,
-    "learning_rate": 5e-4,
+    "batch_size": 16,
+    "learning_rate": 5e-5,
     "epochs": 5,
     "weight_decay": 0.0,
     "seed": 0,
@@ -17,7 +17,7 @@
     "calculate_probs": true,
     "debug": false,
     "hf_token": "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",
-    "rank": 16,
+    "rank": 32,
     "lora_alpha": 32,
     "lora_dropout": 0.05
 }

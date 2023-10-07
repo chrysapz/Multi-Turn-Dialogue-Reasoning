@@ -45,17 +45,17 @@ def generate_and_collect_info(trainer, dev_loader, tokenizer, device, LORA_R):
             generated_tokens_ids = torch.tensor(generated_tokens_ids)
 
             # Gather the probabilities of the generated tokens
-            print(generated_tokens_ids.size())
-            print(probs.size())
-            print("------")
-            actual_probs = torch.gather(probs.permute(1,0,2), 2, generated_tokens_ids[:,-29:].unsqueeze(-1)).squeeze(dim=-1)
+
+            until = int(probs.size(0))
+
+            actual_probs = torch.gather(probs.permute(1,0,2), 2, generated_tokens_ids[:,-until:].unsqueeze(-1)).squeeze(dim=-1)
 
             # Calculate the negative log likelihood for each sequence in the batch
             nll_per_sequence = -torch.log(actual_probs).sum(dim=1)
 
             perplexity = torch.exp(nll_per_sequence)
 
-            batch_generated_text = tokenizer.batch_decode(generated_tokens_ids[:, -29:], skip_special_tokens=True)
+            batch_generated_text = tokenizer.batch_decode(generated_tokens_ids[:, -until:], skip_special_tokens=True)
 
             generated_info.extend([(sent_id.item(), gen_text, perpl) for gen_text, perpl, sent_id in zip(batch_generated_text, perplexity, 
                                                                                                   batch['sentences_id'])])

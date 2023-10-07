@@ -6,7 +6,7 @@
 #SBATCH --job-name=lamma
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=3
-#SBATCH --time=01:30:00
+#SBATCH --time=02:30:00
 #SBATCH --mem=16000M
 #SBATCH --output=jobs/slurm_output/train_llama_%A.out
 

@@ -10,3 +10,6 @@ baseline
 output
 runs
 jobs/jobs/slurm_output
+checkpoints-llama-working
+checkpoints-rank-batch
+checkpoints_actual
