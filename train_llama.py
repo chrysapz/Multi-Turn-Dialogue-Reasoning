@@ -262,7 +262,7 @@ def main(args):
 
     training_arguments = TrainingArguments(
         output_dir=config['out_dir'],
-        per_device_train_batch_size=config['batch_size'],
+        per_device_train_batch_size=config['train_batch_size'],
         num_train_epochs=config['epochs'],
         learning_rate=config['learning_rate'],
         warmup_ratio=config['warmup_steps'],
@@ -311,7 +311,7 @@ def parse_option():
     parser.add_argument('--use_context', action='store_true',help='store_true default is false.')# store_false, store_true
     parser.add_argument('--do_train', action='store_true',help='default is doing only evaluation')
     # general info
-    parser.add_argument('--hf_token', type=str, default='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', help='You can get it from here https://huggingface.co/settings/tokens')
+    parser.add_argument('--hf_token', type=str, default='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', help='You can get it from here https://huggingface.co/settings/tokens')
     parser.add_argument('--model_name', type=str, default='meta-llama/Llama-2-7b-chat-hf')
     parser.add_argument('--tokenizer_name', type=str, default='meta-llama/Llama-2-7b-chat-hf')
     parser.add_argument('--dataset_name', type=str, default='mutual')
@@ -321,8 +321,8 @@ def parse_option():
     parser.add_argument('--out_dir', type=str, default='checkpoints')
     # model hyperparams
     parser.add_argument('--max_seq_length', type=int, default=256)
-    parser.add_argument('--eval_batch_size', type=int, default=8)
-    parser.add_argument('--train_batch_size', type=int, default=8)
+    parser.add_argument('--eval_batch_size', type=int, default=16)
+    parser.add_argument('--train_batch_size', type=int, default=16)
     parser.add_argument('--learning_rate', type=float, default=5e-5)
     parser.add_argument('--epochs', type=int, default=5)
     parser.add_argument('--weight_decay', type=float, default=0.0)
