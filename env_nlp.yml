@@ -17,3 +17,6 @@ dependencies:
     - numpy
     - bitsandbytes
     - accelerate
+    - pandas
+    - seaborn
+    - sentence-transformers
