@@ -187,9 +187,6 @@ def main(args):
     # config['debug'] = True
     # config['do_train'] = False
 
-    # Save the arguments to a JSON file for reference
-    with open('config_llama.json', 'w') as json_file:
-        json.dump(config, json_file, indent=4)  # Use indent for pretty formatting
 
 
     # Read the serialized data from the file and deserialize it
