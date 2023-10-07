@@ -10,7 +10,7 @@ from data import load_all_samples
 from torch.utils.data import DataLoader
 import numpy as np
 import math
-from utils import calculate_true_label_probs, count_true_label_correct
+from utils import calculate_true_label_probs, count_true_label_correct, RPF1
 
 def evaluate_data(model, data_loader, config, device):
     """
@@ -64,11 +64,14 @@ def evaluate_data(model, data_loader, config, device):
     grouped_data, labeled_data = group_data(sentence_ids, option_ids, preds, labels)
     sorted_data = sort_grouped_data(grouped_data)
     metrics = {}
-    # if not config['debug']:
     r_1, r_2, mrr = calculate_IR_metrics(sorted_data, labeled_data)
+    p, r, f1 = RPF1(grouped_data, labeled_data)
     metrics['r1'] = r_1
     metrics['r2'] = r_2
     metrics['mrr'] = mrr
+    metrics['precision'] = p
+    metrics['recall'] = r 
+    metrics['f1'] = f1
 
     avg_loss = total_loss / len(data_loader)
     model.train()

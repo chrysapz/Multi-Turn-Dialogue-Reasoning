@@ -38,6 +38,28 @@ def get_checkpoint_name(config):
     print('date info ', date_info)
     return config_name
 
+def RPF1(grouped_data, labeled_data):
+
+  
+    TP, FP, FN = 0, 0, 0
+
+    max_scores = {key: max(value, key=lambda x: x[1])[0] for key, value in grouped_data.items()}
+    print("these are max scores: ", max_scores)
+    for sentence_id, pred in max_scores.items():
+        correct_option_id = labeled_data[sentence_id]
+        if pred == correct_option_id:
+            TP += 1
+        else:
+            FP += 1
+            FN += 1
+    
+    precision = TP / (TP + FP) if TP + FP > 0 else 0
+    recall = TP / (TP + FN) if TP + FN > 0 else 0  
+    f1 = 2 * (precision * recall) / (precision + recall) if precision + recall > 0 else 0         
+    
+    return precision, recall, f1
+
+
 def calculate_IR_metrics(sorted_grouped_data, labeled_data):
     """
     Calculate information retrieval metrics including R@1, R@2, and MRR. https://en.wikipedia.org/wiki/Evaluation_measures_(information_retrieval)
