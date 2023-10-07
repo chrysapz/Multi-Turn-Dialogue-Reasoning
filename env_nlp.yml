@@ -1,4 +1,4 @@
-name: nlp
+name: bits_nlp
 channels:
   - pytorch
   - nvidia
@@ -15,3 +15,5 @@ dependencies:
     - tqdm
     - matplotlib
     - numpy
+    - bitsandbytes
+    - accelerate

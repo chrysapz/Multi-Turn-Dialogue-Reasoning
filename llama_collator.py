@@ -9,8 +9,9 @@ import torch
 @dataclass
 class LLama_DataCollatorForLanguageModeling(DataCollatorForLanguageModeling):
     """
-    Data collator used for language modeling. Inputs are dynamically padded to the maximum length of a batch if they
-    are not all of the same length.
+    Data collator used for language modeling. Inputs and labels are dynamically padded to the maximum length of a batch if they
+    are not all of the same length. DataCollatorForLanguageModeling just copies the inputs to the labels we don't want 
+    this. That's why we created a subclass
 
     Args:
         tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
@@ -41,6 +42,22 @@ class LLama_DataCollatorForLanguageModeling(DataCollatorForLanguageModeling):
     return_tensors: str = "pt"
     
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        """
+        Padd a list of examples and return a dictionary batch.
+
+        Args:
+            examples (List[Union[List[int], Any, Dict[str, Any]]]): A list of examples, where each example can be
+                a list of input_ids, attention_masks, labels, or a list of input_ids, attention_masks, labels, sentences_id, without_dummy
+
+        Returns:
+            Dict[str, Any]: A dictionary batch containing 'input_ids', 'attention_mask', and 'labels' tensors.
+
+        Note:
+            - If examples contain 5 elements, it is assumed that the examples are generated sequences and include
+              'sentences_id' and 'without_dummy'. Used for Llama_with_sent_ids_dataset.
+            - If examples contain 3 elements, it is assumed that the examples are regular language modeling inputs. Used for Llama_dataset.
+        
+        """
         batch = {}
         if len(examples[0]) == 5: # useful only when using model.generate
             input_ids, attention_masks, labels, sentences_id, without_dummy = zip(*examples)
@@ -58,7 +75,7 @@ class LLama_DataCollatorForLanguageModeling(DataCollatorForLanguageModeling):
         for ids, masks in zip(input_ids, attention_masks):
             padded_ids = ids + [self.tokenizer.pad_token_id] * (max_input_length - len(ids))
             padded_input_ids.append(padded_ids)
-
+            # we don't want to attend to padding tokens
             padded_mask = masks + [0] * (max_input_length - len(ids))
             padded_attention_masks.append(padded_mask)
 
@@ -68,6 +85,7 @@ class LLama_DataCollatorForLanguageModeling(DataCollatorForLanguageModeling):
         max_label_length = max(len(lbls) for lbls in labels)
         padded_labels = []
         for lbls in labels:
+            # we want to ignore the padding tokens
             padded_lbls = lbls + [-100] * (max_label_length - len(lbls))
             padded_labels.append(padded_lbls)
         padded_labels = torch.tensor(padded_labels)
