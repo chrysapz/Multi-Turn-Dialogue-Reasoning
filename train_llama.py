@@ -125,8 +125,14 @@ def generate_and_collect_info(trainer, dev_loader, tokenizer, device, lora_dict,
     # for path name
     formatted_pairs = [f"{key}_{value}" for key, value in lora_dict.items()]
     result_string = "_".join(formatted_pairs)
+
+    directory_path = 'generated_text' # os.path.join('generated_text', f'inference_{result_string}.pkl')
+    if not os.path.exists(directory_path):
+    # If it doesn't exist, create it along with any intermediate directories
+        os.makedirs(directory_path)
     # Save index_list to a binary file
-    with open(f'inference_{result_string}.pkl', 'wb') as file:
+    save_file_path = os.path.join(directory_path, f'inference_{result_string}.pkl')
+    with open(save_file_path, 'wb') as file:
         pickle.dump(all_generated_info, file)
 
     return all_generated_info
@@ -182,7 +188,7 @@ def main(args):
     # config['do_train'] = False
 
     # Save the arguments to a JSON file for reference
-    with open('arg.json', 'w') as json_file:
+    with open('config_llama.json', 'w') as json_file:
         json.dump(config, json_file, indent=4)  # Use indent for pretty formatting
 
 
@@ -254,8 +260,9 @@ def main(args):
                     ) #! maybe we should add target_modules but I am not sure that the allowed values are the same for every model
     model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()
-    lora_dict = {key: config[key] for key in ['rank','lora_alpha','lora_dropout']} # to be used when saving the pickle during inference
-
+    dict_info_for_path = {key: config[key] for key in ['rank','lora_alpha','lora_dropout']} # to be used when saving the pickle during inference
+    dict_info_for_path['loss'] = 'all' if config['use_context'] else 'labels' 
+    dict_info_for_path['lr'] = config['learning_rate']
     # Create data collators for training and development
     train_collate_fn = LLama_DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
     dev_collate_fn = LLama_DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
@@ -278,7 +285,7 @@ def main(args):
     )
 
 
-    trainer = Trainer(model, training_arguments, train_dataset=train_dataset, data_collator = train_collate_fn,
+    trainer = Trainer(model, training_arguments, train_dataset=train_dataset,eval_dataset=dev_dataset, data_collator = train_collate_fn,
             tokenizer=tokenizer)
     if config['do_train']: 
         print('Training...')
@@ -294,7 +301,7 @@ def main(args):
 
     # Perform inference and collect information
     print('Inference...')
-    generate_and_collect_info(trainer, dev_loader, tokenizer, device,lora_dict, train_samples)
+    all_generated_info = generate_and_collect_info(trainer, dev_loader, tokenizer, device,dict_info_for_path, train_samples)
 
 def load_config(path):
     # Open and read the JSON file
