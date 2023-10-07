@@ -16,8 +16,8 @@
     "max_grad_norm": 1.0,
     "calculate_probs": true,
     "debug": false,
-    "hf_token": "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",
-    "rank": 32,
+    "hf_token": "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",
+    "rank": 16,
     "lora_alpha": 32,
     "lora_dropout": 0.05
 }

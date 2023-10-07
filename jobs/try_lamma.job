@@ -6,15 +6,15 @@
 #SBATCH --job-name=lamma
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=3
-#SBATCH --time=00:30:00
-#SBATCH --mem=32000M
-#SBATCH --output=jobs/slurm_output/lamma_2_%A.out
+#SBATCH --time=01:15:00
+#SBATCH --mem=16000M
+#SBATCH --output=jobs/slurm_output/train_llama_%A.out
 
 
 module purge
 module load 2021
 module load Anaconda3/2021.05
 
-cd $HOME/dl4nlp/Multi-Turn-Dialogue-Reasoning
+cd $HOME/Multi-Turn-Dialogue-Reasoning
 source activate nlp
-srun puthon -u try_llama.py
+python -u $HOME/Multi-Turn-Dialogue-Reasoning/train_llama.py
