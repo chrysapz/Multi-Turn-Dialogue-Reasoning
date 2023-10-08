@@ -1,6 +1,7 @@
 from sentence_transformers import SentenceTransformer, util #! pip install -U sentence-transformers
 import argparse
 import pickle
+import numpy as np
 
 MODEL_2_KEY = {
     'all-distilroberta-v1':'dist_rob' # This model is a distilled version of Roberta finetuned on several IR taks.
@@ -86,6 +87,8 @@ def calculate_similarities(batch_size, sentences_info, model_name, metric):
 
     sents_id, generated_texts, labels = extract_lists_from_dict(sentences_info)
 
+    # Initialize lists to store scores
+    scores_list = []
    # Process data in batches
     for i in range(0, len(generated_texts), batch_size):
         batch_generated = generated_texts[i:i + batch_size]
@@ -100,8 +103,15 @@ def calculate_similarities(batch_size, sentences_info, model_name, metric):
 
         # Update batch_generated_info with cosine similarities
         for batch_id, (sent_id, score) in enumerate(zip(batch_sent_ids, batch_scores)):
-           sentences_info[sent_id][new_info_key] = score[batch_id].item()
-        
+            cur_score = score[batch_id].item()
+            sentences_info[sent_id][new_info_key] = cur_score
+            scores_list.append(cur_score
+                               )
+    # Calculate average and standard deviation
+    avg_score = np.mean(scores_list)
+    std_score = np.std(scores_list)
+    print(f'Average similarity ', avg_score, ' std ', std_score)
+
     return sentences_info
 
 def main(args):

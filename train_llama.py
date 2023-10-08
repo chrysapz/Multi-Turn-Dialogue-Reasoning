@@ -6,7 +6,7 @@ from transformers import BitsAndBytesConfig, AutoTokenizer, \
 from peft import (LoraConfig, TaskType, get_peft_model,
                   prepare_model_for_int8_training)
 from torch.utils.data import DataLoader
-from utils import set_seed
+from utils import set_seed, print_args
 from data import load_all_samples
 import matplotlib.pyplot as plt
 from llama_tokenize import Llama_dataset, Llama_with_sent_ids_dataset
@@ -47,7 +47,7 @@ def generate_and_collect_info(trainer, dev_loader, tokenizer, device, lora_dict,
     all_generated_info = {} 
     context_header = '--------BELOW IS THE CONTEXT HISTORY--------'
     generated_header = '--------BELOW IS THE GENERATED TEXT--------'
-
+    epsilon = 1e-10
     with torch.no_grad():
         for i, batch in tqdm(enumerate(dev_loader)):
             inputs = {key: value.to(device) for key, value in batch.items() if key not in ['sentences_id','without_dummy','labels']} #sentence_id is useful only for metrics
@@ -56,7 +56,8 @@ def generate_and_collect_info(trainer, dev_loader, tokenizer, device, lora_dict,
                 **inputs,
                 max_new_tokens=30,
                 output_scores=True,
-                return_dict_in_generate=True)
+                return_dict_in_generate=True,
+                top_p = lora_dict['top_p'])
             #     temperature = 1
             # )
 
@@ -76,7 +77,7 @@ def generate_and_collect_info(trainer, dev_loader, tokenizer, device, lora_dict,
             # Gather the probabilities of the generated tokens probs: (batch_size, generated_timesteps=29, vocab) gen (batch_size, generated_timesteps=30, 1)
             actual_probs = torch.gather(probs.permute(1,0,2), 2, generated_tokens_ids[:,-until:].unsqueeze(-1)).squeeze(dim=-1)
             
-            
+            actual_probs = actual_probs.clamp(min=epsilon)
             # Calculate the negative log likelihood for each sequence in the batch
             is_not_pad_id = generated_tokens_ids[:, -until:] != tokenizer.pad_token_id # batch_size, 30 with binary flags
             negative_log_prob = -torch.log(actual_probs) # batch_size, 30
@@ -136,11 +137,6 @@ def generate_and_collect_info(trainer, dev_loader, tokenizer, device, lora_dict,
         pickle.dump(all_generated_info, file)
 
     return all_generated_info
-
-def print_args(args):
-    print("Parsed Arguments:")
-    for arg in vars(args):
-        print(f"{arg}: {getattr(args, arg)}")
 
 def get_quantize_4bits_config():# Activate 4-bit precision base model loading
     use_4bit = True
@@ -260,6 +256,7 @@ def main(args):
     dict_info_for_path = {key: config[key] for key in ['rank','lora_alpha','lora_dropout']} # to be used when saving the pickle during inference
     dict_info_for_path['loss'] = 'all' if config['use_context'] else 'labels' 
     dict_info_for_path['lr'] = config['learning_rate']
+    dict_info_for_path['top_p'] = config['top_p']
     # Create data collators for training and development
     train_collate_fn = LLama_DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
     dev_collate_fn = LLama_DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
@@ -333,6 +330,7 @@ def parse_option():
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--adam_epsilon', type=float, default=1e-8)
     parser.add_argument('--warmup_steps', type=int, default=0)
+    parser.add_argument('--top_p', type=float, default=1.0)
     # lora hyperparams for parameter efficient finetuning
     parser.add_argument('--rank', type=int, default=32, help='The bigger, the better, as it allows us to update more parameters, but it also increases memory usage.') 
     parser.add_argument('--lora_alpha', type=int, default=32)
