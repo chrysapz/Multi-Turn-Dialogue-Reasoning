@@ -2,6 +2,11 @@ from sentence_transformers import SentenceTransformer, util #! pip install -U se
 import argparse
 import pickle
 import numpy as np
+import os
+import torch
+from utils import load_pickle, create_pickle
+from manual_filtering import preprocess_augmented_labels
+from tqdm import tqdm
 
 MODEL_2_KEY = {
     'all-distilroberta-v1':'dist_rob' # This model is a distilled version of Roberta finetuned on several IR taks.
@@ -14,39 +19,6 @@ metric_functions = {
 }
 
 
-def load_pickle(path):
-    """
-    Load data from a pickle file.
-
-    Args:
-        path (str): The path to the pickle file.
-
-    Returns:
-        dict: A dictionary containing the loaded data.
-    """
-    # with open(path, 'rb') as file:
-    #     sentences_info = pickle.load(file)
-    sentences_info = {
-                    11: {
-                        'gen_text': 'I am exhausted',
-                        'perpl': 2.1,
-                        'without_dummy': 0,
-                        'label':'I am tired'
-                    },
-                     2: {
-                        'gen_text': 'Everything is fine',
-                        'perpl': 3.1,
-                        'without_dummy': 1,
-                        'label':'Everything is going well.'
-                    },
-                     33: {
-                        'gen_text': 'are you similar to the label',
-                        'perpl': 13.1,
-                        'without_dummy': 0,
-                        'label':'are you similar to the generated text'
-                    } }
-    return sentences_info
-
 def extract_lists_from_dict(sentences_info):# Extract sentences and labels from batch_generated_info
     """
     Extract generated sentences and labels from a dictionary.
@@ -58,14 +30,14 @@ def extract_lists_from_dict(sentences_info):# Extract sentences and labels from 
         tuple: A tuple containing lists of sentence IDs, generated texts, and labels.
 
     Note:
-        Every dictionary of a dictionary should include the gen_text and label keys
+        Every dictionary of a dictionary should include the gen_text and true_label keys
     """
     generated_texts = []
     labels = []
     sents_id = []
     for sent_id, info in sentences_info.items():
         generated_texts.append(info['gen_text'])
-        labels.append(info['label'])
+        labels.append(info['true_label'])
         sents_id.append(sent_id)
     return sents_id, generated_texts, labels
 
@@ -82,7 +54,8 @@ def calculate_similarities(batch_size, sentences_info, model_name, metric):
     Returns:
         sentences_info (dict): An updated dictionary of a dictionary containing sentence information with similarity scores added.
     """
-    model = SentenceTransformer(model_name)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = SentenceTransformer(model_name, device=device)
     new_info_key = f'{MODEL_2_KEY[model_name]}_{metric}' # name of the new key about similarities
 
     sents_id, generated_texts, labels = extract_lists_from_dict(sentences_info)
@@ -90,14 +63,14 @@ def calculate_similarities(batch_size, sentences_info, model_name, metric):
     # Initialize lists to store scores
     scores_list = []
    # Process data in batches
-    for i in range(0, len(generated_texts), batch_size):
+    for i in tqdm(range(0, len(generated_texts), batch_size)):
         batch_generated = generated_texts[i:i + batch_size]
         batch_labels = labels[i:i + batch_size]
         batch_sent_ids = sents_id[i:i+batch_size]
 
         #Compute embedding for both lists
-        embeddings1 = model.encode(batch_generated, convert_to_tensor=True)
-        embeddings2 = model.encode(batch_labels, convert_to_tensor=True)
+        embeddings1 = model.encode(batch_generated, convert_to_tensor=True, device=device)
+        embeddings2 = model.encode(batch_labels, convert_to_tensor=True, device=device)
         
         batch_scores = metric_functions[metric](embeddings1, embeddings2)
 
@@ -105,8 +78,8 @@ def calculate_similarities(batch_size, sentences_info, model_name, metric):
         for batch_id, (sent_id, score) in enumerate(zip(batch_sent_ids, batch_scores)):
             cur_score = score[batch_id].item()
             sentences_info[sent_id][new_info_key] = cur_score
-            scores_list.append(cur_score
-                               )
+            scores_list.append(cur_score)
+
     # Calculate average and standard deviation
     avg_score = np.mean(scores_list)
     std_score = np.std(scores_list)
@@ -115,15 +88,21 @@ def calculate_similarities(batch_size, sentences_info, model_name, metric):
     return sentences_info
 
 def main(args):
-    sentences_info = load_pickle(args.path) 
+    path = os.path.join('generated_text',args.pickle_name)
+    sentences_info = load_pickle(path) 
     
-    sentences_info = calculate_similarities(args.batch_size, sentences_info, args.model_name, args.metric)
+    preprocessed_sentences_info = preprocess_augmented_labels(sentences_info, train_id2options)
+
+    sentences_info = calculate_similarities(args.batch_size, preprocessed_sentences_info, args.model_name, args.metric)
+    # we save in the same pickle
+    new_pickle_name = args.pickle_name
+    create_pickle(sentences_info, path)
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description="Calculate similarities between sentences using various models and metrics.")
     
     # Argument for the path to the pickle file including the sentence information
-    parser.add_argument("--path", type=str, default="generated_text", help="Path to the pickle file containing sentence information.")
+    parser.add_argument("--pickle_name", type=str, default="only_inference_colab_greedy_decoding.pkl", help="Name of the pickle file containing sentence information.")
     
     # Argument for batch size
     parser.add_argument("--batch_size", type=int, default=2, help="Batch size for similarity calculations.")

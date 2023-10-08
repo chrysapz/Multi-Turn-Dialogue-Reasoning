@@ -15,11 +15,13 @@ from evaluate import evaluate_data, calculate_probs, group_data, sort_grouped_da
 from time import gmtime, strftime
 from tqdm import tqdm
 from collections import defaultdict
-from utils import calculate_true_label_probs, count_true_label_correct, calculate_mean, calculate_variability, print_args, create_pickle
+from utils import calculate_true_label_probs, add_augmented_to_training, load_pickle, count_true_label_correct, calculate_mean, calculate_variability, print_args, create_pickle, create_dicts_from_tuples
 import pandas as pd
 import argparse
 import pickle
+from manual_filtering import preprocess_augmented_labels, remove_last_sentence
 
+NUM_TRAIN_EXAMPLES = 6000
 
 def train(model, train_loader, dev_loader, optimizer, config, device):
     """
@@ -120,11 +122,34 @@ def train(model, train_loader, dev_loader, optimizer, config, device):
 
     return best_model_info, epoch_loss, confidence, variability, correctness
 
+def create_sub_dict(id2history, id2options, id2label_id, k_ids):
+    """
+    For debugging, create sub-dictionaries from input dictionaries based on a list of selected keys.
+
+    Args:
+        id2history (dict): A dictionary mapping IDs to history data.
+        id2options (dict): A dictionary mapping IDs to options data.
+        id2label_id (dict): A dictionary mapping IDs to label IDs.
+        k_ids (list): A list of keys (IDs) to select from the input dictionaries.
+
+    Returns:
+        tuple: A tuple containing three dictionaries:
+            - sub_id2history (dict): A sub-dictionary containing selected history data.
+            - sub_id2options (dict): A sub-dictionary containing selected options data.
+            - sub_id2label_id (dict): A sub-dictionary containing selected label IDs.
+    """
+    sub_id2history = {id: id2history[id] for id in k_ids}
+    sub_id2options = {id: id2options[id] for id in k_ids}
+    sub_id2label_id = {id: id2label_id[id] for id in k_ids}
+
+    return sub_id2history, sub_id2options, sub_id2label_id
+
 def main(config):
     print('Training')
     print_args(args)
     config = vars(args) # convert to dict
     # config['debug'] = True
+    # config['augment'] = 'only_inference_colab_greedy_decoding.pkl'
     # Set up the data directory and device
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -137,28 +162,56 @@ def main(config):
     # Load training and val data
     initial_train_samples = load_all_samples(base_dir, 'train')
     # Read the serialized data from the file and deserialize it
-    with open('index_list.pkl', 'rb') as file:
-        indexed_train_list = pickle.load(file)
+    indexed_train_list = load_pickle('index_list.pkl')
 
     shuffled_samples = [initial_train_samples[i] for i in indexed_train_list]
 
-    train_samples = shuffled_samples[:6000]
-    dev_samples = shuffled_samples[6000:] 
+    train_samples = shuffled_samples[:NUM_TRAIN_EXAMPLES]
+    train_random_indices = indexed_train_list[:NUM_TRAIN_EXAMPLES]
+    train_id2history, train_id2options, train_id2label_id = create_dicts_from_tuples(train_samples, train_random_indices)
+
+    dev_samples = shuffled_samples[NUM_TRAIN_EXAMPLES:] 
+    val_random_indices = indexed_train_list[NUM_TRAIN_EXAMPLES:]
+    val_id2history, val_id2options, val_id2label_id = create_dicts_from_tuples(dev_samples, val_random_indices)
 
     test_samples = load_all_samples(base_dir, 'dev')
+    test_indices = list(range(len(test_samples)))
+    test_id2history, test_id2options, test_id2label_id = create_dicts_from_tuples(test_samples, test_indices)
+
+    if config['augment'] is not None:
+        pickle_path = os.path.join('generated_text',config['augment'])
+        generated_info = load_pickle(pickle_path)
+        print('add start remove new line')
+        generated_info = preprocess_augmented_labels(generated_info, train_id2options)
+        # print('remove last sentence')
+        # generated_info = remove_last_sentence(generated_info)
+        train_id2options, train_id2label_id = add_augmented_to_training(generated_info, train_id2options, train_id2label_id)
+        # train_id2history = create_dicts_from_tuples(train_samples, train_random_indices)
 
     if config['debug']:
-        k = 2
-        train_samples = train_samples[:k] # k * num_options in the dataset below
-        dev_samples = dev_samples[:k]
-        test_samples = test_samples[:k] # k * num_options in the dataset below
-        config['epochs'] = 2
-        config['batch_size'] = 2
+        train_k_ids = [2650, 2868]
+        test_k_ids = [2,1]
+        val_k_ids = [2860,5806]
+
+        train_id2history, train_id2options, train_id2label_id = create_sub_dict(train_id2history, train_id2options, train_id2label_id, train_k_ids)
+        val_id2history, val_id2options, val_id2label_id = create_sub_dict(val_id2history, val_id2options, val_id2label_id, val_k_ids)
+        test_id2history, test_id2options, test_id2label_id = create_sub_dict(test_id2history, test_id2options, test_id2label_id, test_k_ids)
+
+        # train_samples = train_samples[:k] # k * num_options in the dataset below
+        # dev_samples = dev_samples[:k]
+        # test_samples = test_samples[:k] # k * num_options in the dataset below
+        # config['epochs'] = 2
+        # config['batch_size'] = 2
+    assert(len(train_id2history) == len(train_id2options) == len(train_id2label_id))
+    assert(len(val_id2history) == len(val_id2options) == len(val_id2label_id))
+    assert(len(test_id2history) == len(test_id2options) == len(test_id2label_id))
+
+    print(f'len training set {len(train_id2history)} len val set {len(val_id2history)} len test set {len(test_id2history)}')
 
     # tokenize and create datasets for training and eval datat
-    train_dataset = MutualDataset(train_samples, tokenizer, config['max_seq_length'])
-    dev_dataset = MutualDataset(dev_samples, tokenizer, config['max_seq_length'])
-    test_dataset = MutualDataset(test_samples, tokenizer, config['max_seq_length'])
+    train_dataset = MutualDataset(train_id2history, train_id2options, train_id2label_id, tokenizer, config['max_seq_length'])
+    dev_dataset = MutualDataset(val_id2history, val_id2options, val_id2label_id, tokenizer, config['max_seq_length'])
+    test_dataset = MutualDataset(test_id2history, test_id2options, test_id2label_id, tokenizer, config['max_seq_length'])
 
     # create the model
     model = AutoModelForSequenceClassification.from_pretrained(config['model_name'], num_labels = 2)
@@ -270,7 +323,7 @@ def parse_option():
     parser.add_argument("--max_seq_length", type=int, default=256)
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--learning_rate", type=float, default=3e-5)
-    parser.add_argument("--epochs", type=int, default=2)
+    parser.add_argument("--epochs", type=int, default=4)
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--adam_epsilon", type=float, default=1e-8)
@@ -281,7 +334,8 @@ def parse_option():
     #todo
     parser.add_argument('--repeat', action='store_true',help='default is not to repeat training data')
     # #todo
-    # parser.add_argument('--augment', action=str,help='default is not to augment training data')
+    parser.add_argument('--augment', type=str,default='inference_rank_32_lora_alpha_32_lora_dropout_0.05_loss_labels_lr_2e-05_top_p_0.92_train_finetuned.pkl',
+                         help='default is not to augment training data')
 
     # Parse the command-line arguments
     args = parser.parse_args()
