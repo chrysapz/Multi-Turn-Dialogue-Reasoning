@@ -85,8 +85,14 @@ def calculate_similarities(batch_size, sentences_info, model_name, metric):
 
     avg_score = np.mean(scores_list)
     std_score = np.std(scores_list)
+    more_than50 = np.sum(np.array(scores_list) > 0.5)
+    more_than60 = np.sum(np.array(scores_list) > 0.6)
+    more_than70 = np.sum(np.array(scores_list) > 0.7)
+    
+    total = len(scores_list)
 
-    return sentences_info, avg_score, std_score
+
+    return sentences_info, avg_score, std_score, more_than50, more_than60, more_than70, total
 
 def get_all_pickles():
     # Define the directory path
@@ -116,6 +122,11 @@ def main(args):
     all_means = []
     all_stds = []
     all_pickle_names = []
+    all_50 = []
+    all_60 = []
+    all_70 = []
+    total_len_arr = []
+
     for pickle_name in dict_pickles:
         sentences_info = dict_pickles[pickle_name]
         # remove 'm :' or 'f :' from start
@@ -124,7 +135,7 @@ def main(args):
         # related to '' and '\n' 
         preprocessed_sentences_info = preprocess_augmented_labels(sentences_info)
 
-        sentences_info, avg_score, std_score = calculate_similarities(args.batch_size, preprocessed_sentences_info, args.model_name, args.metric)
+        sentences_info, avg_score, std_score, more_than50, more_than60, more_than70, total_len = calculate_similarities(args.batch_size, preprocessed_sentences_info, args.model_name, args.metric)
         print('*'*12)
         print(f"{pickle_name}")
         print("Average: {avg_score:.3f} ± {std_score:.3f}")
@@ -132,16 +143,24 @@ def main(args):
         all_means.append(avg_score)
         all_stds.append(std_score)
         all_pickle_names.append(pickle_name)
+        all_50.append(more_than50)
+        all_60.append(more_than60)
+        all_70.append(more_than70)
+        total_len_arr.append(total_len)
     
 
     # Sort the lists in descending order based on all_means
     sorted_indices = sorted(range(len(all_means)), key=lambda i: all_means[i], reverse=True)
-    top3_indices = sorted_indices[:3]
+    top3_indices = sorted_indices
 
     for i in top3_indices:
         print("Pickle Name:", all_pickle_names[i])
         print("Average:", all_means[i])
         print("Standard Deviation:", all_stds[i])
+        print("more than 50: ", all_50[i])
+        print("more than 60: ", all_60[i])
+        print("more than 70: ", all_70[i])
+        print("length: ", total_len_arr[i])
         print('*' * 12)
 
 
