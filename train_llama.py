@@ -284,7 +284,9 @@ def main(args):
     if config['do_train']: 
         print('Training...')
         trainer.train()
-    
+        dict_info_for_path['train'] = 'finetuned'
+    else:
+        dict_info_for_path['train'] = 'not_finetuned'
     trainer.model.eval()
 
     # pass the indices before shuffling
