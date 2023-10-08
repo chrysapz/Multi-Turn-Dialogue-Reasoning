@@ -50,6 +50,9 @@ def remove_start_true_labels(generated_info):
 
 
 def add_start_to_augmented_labels(generated_info, train_id2options):
+    '''
+    Add 'f :' or 'm :' based on what was used in the given options
+    '''
     add_start_generated_info = {} 
     for sent_id in generated_info:
         generated_text = generated_info[sent_id]['gen_text'] # string 
@@ -58,6 +61,7 @@ def add_start_to_augmented_labels(generated_info, train_id2options):
         #     continue # we won't add this generated txt
 
         add_start_generated_info[sent_id] = deepcopy(generated_info[sent_id])
+        # check whether the options have m : or f : and put the same
         existing_options = train_id2options[sent_id]  # list  
         for possible_start in turn_start:
             if existing_options[0].startswith(possible_start):
@@ -88,11 +92,11 @@ def preprocess_augmented_labels(generated_info):
         # generated_text_with_start = matching_start + ' '+ remove_new_lines
         preprocessed_generated_info[sent_id]['gen_text'] = truncated_generated
     
-    print(f'total empty generated responses {counter_empty} we removed')
-    print(f'number of times we truncated the last sentence {counter_truncate_last_sentence}')
+    print(f'total empty generated responses we removed: {counter_empty}')
+    print(f'number of times we truncated the last sentence: {counter_truncate_last_sentence}')
     return preprocessed_generated_info
 
-def length_filtering(tokenizer, generated_info):
+def length_statistics(tokenizer, generated_info):
     ratios = [] 
     generated_lens = []
     labels_lens = []
@@ -142,22 +146,9 @@ def remove_last_sentence(generated_info):
 
     return remove_end_generated_info
 
-'''
-import nltk
-
-def remove_last_sentence(input_text):
-    # Download the Punkt tokenizer if you haven't already
-    nltk.download('punkt')
-
-    # Tokenize the text into sentences
-    sentences = nltk.sent_tokenize(input_text)
-
-    # Remove the last sentence
-    if sentences:
-        sentences.pop()
-
-    # Reconstruct the text without the last sentence
-    cleaned_text = ' '.join(sentences)
-    return cleaned_text
-
-'''
+def remove_using_similarity(new_generated_info, avg_score, sim_key):
+    updated_generated_info = {}
+    for sent_id in new_generated_info:
+        if new_generated_info[sent_id][sim_key] > avg_score:
+            updated_generated_info[sent_id] = deepcopy(new_generated_info[sent_id])
+    return updated_generated_info

@@ -15,12 +15,12 @@ from evaluate import evaluate_data, calculate_probs, group_data, sort_grouped_da
 from time import gmtime, strftime
 from tqdm import tqdm
 from collections import defaultdict
-from utils import calculate_true_label_probs, add_augmented_to_training_data, load_pickle, count_true_label_correct, calculate_mean, calculate_variability, print_args, create_pickle, create_dicts_from_tuples
+from utils import calculate_true_label_probs, repeat_training_data, add_augmented_to_training_data, load_pickle, count_true_label_correct, calculate_mean, calculate_variability, print_args, create_pickle, create_dicts_from_tuples
 import pandas as pd
 import argparse
-from similarities import calculate_similarities
+from similarities import calculate_similarities, get_sim_key
 import pickle
-from manual_filtering import preprocess_augmented_labels, remove_last_sentence, add_start_to_augmented_labels, length_filtering
+from manual_filtering import preprocess_augmented_labels, remove_last_sentence, add_start_to_augmented_labels, length_statistics, remove_using_similarity
 
 NUM_TRAIN_EXAMPLES = 6000
 
@@ -149,7 +149,8 @@ def main(config):
     print('Training')
     print_args(args)
     config = vars(args) # convert to dict
-    # config['debug'] = True
+    # config['sim']  =True
+    # # config['debug'] = True
     # config['augment'] = 'only_inference_colab_greedy_decoding.pkl'
     # Set up the data directory and device
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
@@ -185,18 +186,27 @@ def main(config):
         print('add start remove new line')
         preprocessed_generated_info = preprocess_augmented_labels(generated_info)
 
-        length_filtering(tokenizer, preprocessed_generated_info)
+        ratios = length_statistics(tokenizer, preprocessed_generated_info)
 
-        generated_info = add_start_to_augmented_labels(preprocessed_generated_info, train_id2options)
+        new_generated_info = add_start_to_augmented_labels(preprocessed_generated_info, train_id2options)
 
-        # if 
-        # a=calculate_similarities(batch_size = 64, generated_info, 'all-distilroberta-v1', 'cosine')
+        if config['sim']:
+            model_name = 'all-distilroberta-v1'
+            metric =  'cosine'
+            sim_key = get_sim_key(model_name, metric)
+            new_generated_info, avg_score, std_score, _,_,_, _ = calculate_similarities(64, new_generated_info, model_name, metric)
+            new_generated_info = remove_using_similarity(new_generated_info, avg_score, sim_key)
+            print('*'*12)
+            print(f'number of new examples we are going to add: {len(new_generated_info)} ')
 
         # generated_info = preprocess_augmented_labels(generated_info, train_id2options)
         # print('remove last sentence')
         # generated_info = remove_last_sentence(generated_info)
-        train_id2options, train_id2label_id = add_augmented_to_training_data(generated_info, train_id2options, train_id2label_id, config['consider_gold'])
+        train_id2options, train_id2label_id = add_augmented_to_training_data(new_generated_info, train_id2options, train_id2label_id, config['consider_gold'])
         # train_id2history = create_dicts_from_tuples(train_samples, train_random_indices)
+
+    if config['repeat'] > 0:
+        train_id2options, train_id2label_id = repeat_training_data(train_id2options, train_id2label_id, number = config['repeat'])
 
     if config['debug']:
         train_k_ids = [2650, 2868]
@@ -342,10 +352,10 @@ def parse_option():
     parser.add_argument("--calculate_probs", type=bool, default=True)
     parser.add_argument("--consider_gold", action='store_true',help='default is to consider the augmented labels as noisy')
     parser.add_argument('--debug', action='store_true',help='default is not to debug')
-    parser.add_argument('--sim', action='store_true',help='default is not to use similarities')
+    parser.add_argument('--sim', action='store_true',help='default is not to filter using similarities')
     #todo
-    parser.add_argument('--repeat', action='store_true',help='default is not to repeat training data')
-    parser.add_argument('--augment', type=str,default='inference_rank_32_lora_alpha_32_lora_dropout_0.05_loss_labels_lr_5e-05.pkl',
+    parser.add_argument('--repeat', type=int, default=0, help='default is not to repeat training data')
+    parser.add_argument('--augment', type=str,default=None,
                          help='default is not to augment training data')
 
     # Parse the command-line arguments

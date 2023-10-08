@@ -4,7 +4,7 @@ import datetime
 import random
 from collections import defaultdict
 import pickle
-
+from copy import deepcopy
 # see https://github.com/Nealcly/MuTual/blob/master/eval_sample/eval.py
 def set_seed(seed):
     """
@@ -113,6 +113,43 @@ def add_augmented_to_training_data(generated_info, train_id2options, train_id2la
         train_id2options[sent_id].append(generated_text)
         if consider_gold:
             train_id2label_id[sent_id].append(len(train_id2options[sent_id])-1)
+
+    return train_id2options, train_id2label_id
+
+def repeat_training_data(train_id2options, train_id2label_id, number):
+    """
+    Add augmented data to dictionaries of training examples.
+
+    Args:
+        train_id2options (dict): A dictionary of training examples, where keys
+            are sentence IDs and values are lists of options. The generated
+            text will be appended to the list of options for each sentence ID.
+        train_id2label_id (dict): A dictionary of training examples, where keys
+            are sentence IDs and values are lists of true label_ids. 
+        number (int): how many training data to repeat
+    Returns:
+        dict: The updated `train_id2options` dictionary with augmented data labels.
+    """
+    # Randomly select k keys from the dictionary
+    repeated_train_id2options = deepcopy(train_id2options)
+    repeated_train_id2label_id = deepcopy(train_id2label_id)
+
+    selected_repeated = random.sample(list(train_id2label_id.keys()), number)
+    i=0
+    for sent_id in selected_repeated:
+        label_ids = train_id2label_id[sent_id]
+        existing_options_texts = train_id2options[sent_id]
+        for label_id in label_ids:
+            true_label = existing_options_texts[label_id]
+
+            repeated_train_id2options[sent_id].append(true_label)
+            repeated_train_id2label_id[sent_id].append(label_id)
+            i+=1
+    print(i)
+    return repeated_train_id2options, repeated_train_id2label_id
+        # train_id2options[sent_id].append(generated_text)
+        # if consider_gold:
+        #     train_id2label_id[sent_id].append(len(train_id2options[sent_id])-1)
 
     return train_id2options, train_id2label_id
 

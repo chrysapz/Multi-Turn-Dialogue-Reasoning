@@ -9,6 +9,7 @@ from manual_filtering import preprocess_augmented_labels, remove_start_true_labe
 from tqdm import tqdm
 from pathlib import Path
 import pprint
+from copy import deepcopy
 
 MODEL_2_KEY = {
     'all-distilroberta-v1':'dist_rob' # This model is a distilled version of Roberta finetuned on several IR taks.
@@ -43,6 +44,10 @@ def extract_lists_from_dict(sentences_info):# Extract sentences and labels from 
         sents_id.append(sent_id)
     return sents_id, generated_texts, labels
 
+def get_sim_key(model_name, metric):
+    new_info_key = f'{MODEL_2_KEY[model_name]}_{metric}' # name of the new key about similarities
+    return new_info_key
+
 def calculate_similarities(batch_size, sentences_info, model_name, metric):
     """
     Calculate similarities between generated texts and labels using a specific model and metric.
@@ -59,10 +64,10 @@ def calculate_similarities(batch_size, sentences_info, model_name, metric):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f'device {device}')
     model = SentenceTransformer(model_name, device=device)
-    new_info_key = f'{MODEL_2_KEY[model_name]}_{metric}' # name of the new key about similarities
-
+    new_info_key = get_sim_key(model_name, metric)
     sents_id, generated_texts, labels = extract_lists_from_dict(sentences_info)
 
+    generated_info = deepcopy(sentences_info)
     # Initialize lists to store scores
     scores_list = []
    # Process data in batches
@@ -80,8 +85,9 @@ def calculate_similarities(batch_size, sentences_info, model_name, metric):
         # Update batch_generated_info with cosine similarities
         for batch_id, (sent_id, score) in enumerate(zip(batch_sent_ids, batch_scores)):
             cur_score = score[batch_id].item()
-            sentences_info[sent_id][new_info_key] = cur_score
+            generated_info[sent_id][new_info_key] = cur_score
             scores_list.append(cur_score)
+        
 
     avg_score = np.mean(scores_list)
     std_score = np.std(scores_list)
@@ -92,7 +98,7 @@ def calculate_similarities(batch_size, sentences_info, model_name, metric):
     total = len(scores_list)
 
 
-    return sentences_info, avg_score, std_score, more_than50, more_than60, more_than70, total
+    return generated_info, avg_score, std_score, more_than50, more_than60, more_than70, total
 
 def get_all_pickles():
     # Define the directory path
