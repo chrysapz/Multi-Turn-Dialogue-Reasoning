@@ -20,10 +20,12 @@ class MutualDataset(data.Dataset):
         option_ids (list): A list of option IDs (numbers) corresponding to each tokenized input.
 
     """
-    def __init__(self, id2history, id2options, id2label_id, tokenizer, max_seq_length):
+    def __init__(self, id2history, id2options, id2label_id, tokenizer, max_seq_length, repeat=False):
         super().__init__()
         sentences_id, input_ids, attention_mask, labels, option_ids = self.tokenize_roberta_data(id2history, id2options, id2label_id, tokenizer, max_seq_length)
 
+
+        
         self.input_ids = input_ids
         self.attention_mask = attention_mask
         self.labels = labels

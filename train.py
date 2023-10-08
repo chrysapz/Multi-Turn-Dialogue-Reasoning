@@ -18,8 +18,9 @@ from collections import defaultdict
 from utils import calculate_true_label_probs, add_augmented_to_training_data, load_pickle, count_true_label_correct, calculate_mean, calculate_variability, print_args, create_pickle, create_dicts_from_tuples
 import pandas as pd
 import argparse
+from similarities import calculate_similarities
 import pickle
-from manual_filtering import preprocess_augmented_labels, remove_last_sentence, add_start_to_augmented_labels
+from manual_filtering import preprocess_augmented_labels, remove_last_sentence, add_start_to_augmented_labels, length_filtering
 
 NUM_TRAIN_EXAMPLES = 6000
 
@@ -183,7 +184,13 @@ def main(config):
         generated_info = load_pickle(pickle_path)
         print('add start remove new line')
         preprocessed_generated_info = preprocess_augmented_labels(generated_info)
+
+        length_filtering(tokenizer, preprocessed_generated_info)
+
         generated_info = add_start_to_augmented_labels(preprocessed_generated_info, train_id2options)
+
+        # if 
+        # a=calculate_similarities(batch_size = 64, generated_info, 'all-distilroberta-v1', 'cosine')
 
         # generated_info = preprocess_augmented_labels(generated_info, train_id2options)
         # print('remove last sentence')
@@ -212,9 +219,9 @@ def main(config):
     print(f'len training set {len(train_id2history)} len val set {len(val_id2history)} len test set {len(test_id2history)}')
 
     # tokenize and create datasets for training and eval datat
-    train_dataset = MutualDataset(train_id2history, train_id2options, train_id2label_id, tokenizer, config['max_seq_length'])
-    dev_dataset = MutualDataset(val_id2history, val_id2options, val_id2label_id, tokenizer, config['max_seq_length'])
-    test_dataset = MutualDataset(test_id2history, test_id2options, test_id2label_id, tokenizer, config['max_seq_length'])
+    train_dataset = MutualDataset(train_id2history, train_id2options, train_id2label_id, tokenizer, config['max_seq_length'], config['repeat'])
+    dev_dataset = MutualDataset(val_id2history, val_id2options, val_id2label_id, tokenizer, config['max_seq_length'], repeat=False)
+    test_dataset = MutualDataset(test_id2history, test_id2options, test_id2label_id, tokenizer, config['max_seq_length'], repeat=False)
 
     # create the model
     model = AutoModelForSequenceClassification.from_pretrained(config['model_name'], num_labels = 2)
@@ -335,10 +342,10 @@ def parse_option():
     parser.add_argument("--calculate_probs", type=bool, default=True)
     parser.add_argument("--consider_gold", action='store_true',help='default is to consider the augmented labels as noisy')
     parser.add_argument('--debug', action='store_true',help='default is not to debug')
+    parser.add_argument('--sim', action='store_true',help='default is not to use similarities')
     #todo
     parser.add_argument('--repeat', action='store_true',help='default is not to repeat training data')
-    # #todo
-    parser.add_argument('--augment', type=str,default='inference_rank_32_lora_alpha_32_lora_dropout_0.05_loss_labels_lr_2e-05_top_p_0.92_train_finetuned.pkl',
+    parser.add_argument('--augment', type=str,default='inference_rank_32_lora_alpha_32_lora_dropout_0.05_loss_labels_lr_5e-05.pkl',
                          help='default is not to augment training data')
 
     # Parse the command-line arguments

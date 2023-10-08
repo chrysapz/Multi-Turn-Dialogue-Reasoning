@@ -129,7 +129,7 @@ def main(args):
 
     for pickle_name in dict_pickles:
         sentences_info = dict_pickles[pickle_name]
-        # remove 'm :' or 'f :' from start
+        # remove 'm :' or 'f :' from start of the true_label
         sentences_info = remove_start_true_labels(sentences_info)
 
         # related to '' and '\n' 
