@@ -15,11 +15,11 @@ from evaluate import evaluate_data, calculate_probs, group_data, sort_grouped_da
 from time import gmtime, strftime
 from tqdm import tqdm
 from collections import defaultdict
-from utils import calculate_true_label_probs, add_augmented_to_training, load_pickle, count_true_label_correct, calculate_mean, calculate_variability, print_args, create_pickle, create_dicts_from_tuples
+from utils import calculate_true_label_probs, add_augmented_to_training_data, load_pickle, count_true_label_correct, calculate_mean, calculate_variability, print_args, create_pickle, create_dicts_from_tuples
 import pandas as pd
 import argparse
 import pickle
-from manual_filtering import preprocess_augmented_labels, remove_last_sentence
+from manual_filtering import preprocess_augmented_labels, remove_last_sentence, add_start_to_augmented_labels
 
 NUM_TRAIN_EXAMPLES = 6000
 
@@ -182,10 +182,13 @@ def main(config):
         pickle_path = os.path.join('generated_text',config['augment'])
         generated_info = load_pickle(pickle_path)
         print('add start remove new line')
-        generated_info = preprocess_augmented_labels(generated_info, train_id2options)
+        preprocessed_generated_info = preprocess_augmented_labels(generated_info)
+        generated_info = add_start_to_augmented_labels(preprocessed_generated_info, train_id2options)
+
+        # generated_info = preprocess_augmented_labels(generated_info, train_id2options)
         # print('remove last sentence')
         # generated_info = remove_last_sentence(generated_info)
-        train_id2options, train_id2label_id = add_augmented_to_training(generated_info, train_id2options, train_id2label_id)
+        train_id2options, train_id2label_id = add_augmented_to_training_data(generated_info, train_id2options, train_id2label_id, config['consider_gold'])
         # train_id2history = create_dicts_from_tuples(train_samples, train_random_indices)
 
     if config['debug']:
@@ -330,6 +333,7 @@ def parse_option():
     parser.add_argument("--warmup_steps", type=int, default=0)
     parser.add_argument("--max_grad_norm", type=float, default=1.0)
     parser.add_argument("--calculate_probs", type=bool, default=True)
+    parser.add_argument("--consider_gold", action='store_true',help='default is to consider the augmented labels as noisy')
     parser.add_argument('--debug', action='store_true',help='default is not to debug')
     #todo
     parser.add_argument('--repeat', action='store_true',help='default is not to repeat training data')

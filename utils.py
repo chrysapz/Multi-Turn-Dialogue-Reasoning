@@ -90,7 +90,7 @@ def create_dicts_from_tuples(samples, indices):
         id2label_id[sent_id] = [label_id]
     return id2history, id2options, id2label_id
 
-def add_augmented_to_training(generated_info, train_id2options, train_id2label_id):
+def add_augmented_to_training_data(generated_info, train_id2options, train_id2label_id, consider_gold):
     """
     Add augmented data to dictionaries of training examples.
 
@@ -111,7 +111,8 @@ def add_augmented_to_training(generated_info, train_id2options, train_id2label_i
         generated_text = generated_info[sent_id]['gen_text']
         #! assume that we only generate one text for the same sentence
         train_id2options[sent_id].append(generated_text)
-        train_id2label_id[sent_id].append(len(train_id2options[sent_id])-1)
+        if consider_gold:
+            train_id2label_id[sent_id].append(len(train_id2options[sent_id])-1)
 
     return train_id2options, train_id2label_id
 
@@ -312,7 +313,7 @@ if __name__=='__main__':
     #         text will be appended to the list of options for each sentence ID.
     #     train_id2label_id (dict): A dictionary of training examples, where keys
     #         are sentence IDs and values are lists of true label_ids. 
-    id2options, id2label_id = add_augmented_to_training(generated_info, id2options, id2label_id)
+    id2options, id2label_id = add_augmented_to_training_data(generated_info, id2options, id2label_id)
 
 
     sorted_grouped_data = {1:[2,0,1,3],2:[1,2,0,3]}

@@ -6,14 +6,31 @@ turn_start = [
     'm :',
 ]
 
-def preprocess_augmented_labels(generated_info, train_id2options):
-    add_start_generated_info = {} #deepcopy(generated_info)
-    counter_empty = 0
+def remove_start_true_labels(generated_info):
+    '''
+    useful for semantic similarity
+    '''
+    add_start_generated_info = {} 
     for sent_id in generated_info:
-        initial_generated_text = generated_info[sent_id]['gen_text'] # string 
-        if initial_generated_text == '': 
-            counter_empty += 1
-            continue # we won't add this generated txt
+        true_label = generated_info[sent_id]['true_label'] # string 
+        # if initial_generated_text == '': 
+        #     counter_empty += 1
+        #     continue # we won't add this generated txt
+
+        add_start_generated_info[sent_id] = deepcopy(generated_info[sent_id])
+        if true_label[:4] == 'm : ' or true_label[:4] == 'f : ':
+            add_start_generated_info[sent_id]['true_label'] = true_label[4:]
+    
+    return add_start_generated_info
+
+
+def add_start_to_augmented_labels(generated_info, train_id2options):
+    add_start_generated_info = {} 
+    for sent_id in generated_info:
+        generated_text = generated_info[sent_id]['gen_text'] # string 
+        # if initial_generated_text == '': 
+        #     counter_empty += 1
+        #     continue # we won't add this generated txt
 
         add_start_generated_info[sent_id] = deepcopy(generated_info[sent_id])
         existing_options = train_id2options[sent_id]  # list  
@@ -22,12 +39,29 @@ def preprocess_augmented_labels(generated_info, train_id2options):
                 matching_start = possible_start
                 break
 
-        remove_new_lines = initial_generated_text.replace('\n', '')
-        generated_text_with_start = matching_start + ' '+ remove_new_lines
+        generated_text_with_start = matching_start + ' '+ generated_text
         add_start_generated_info[sent_id]['gen_text'] = generated_text_with_start
     
-    print(f'total empty responses {counter_empty}')
     return add_start_generated_info
+
+def preprocess_augmented_labels(generated_info):
+    preprocessed_generated_info = {}
+    counter_empty = 0
+    for sent_id in generated_info:
+        initial_generated_text = generated_info[sent_id]['gen_text'] # string 
+        preprocessed_generated = initial_generated_text.replace('\n', '')
+
+        if preprocessed_generated == '': 
+            counter_empty += 1
+            continue # we won't add this generated txt
+
+        preprocessed_generated_info[sent_id] = deepcopy(generated_info[sent_id])
+
+        # generated_text_with_start = matching_start + ' '+ remove_new_lines
+        preprocessed_generated_info[sent_id]['gen_text'] = preprocessed_generated
+    
+    print(f'total empty responses {counter_empty}')
+    return preprocessed_generated_info
 
 def remove_last_sentence(generated_info):
     remove_end_generated_info = deepcopy(generated_info)

@@ -5,8 +5,10 @@ import numpy as np
 import os
 import torch
 from utils import load_pickle, create_pickle
-from manual_filtering import preprocess_augmented_labels
+from manual_filtering import preprocess_augmented_labels, remove_start_true_labels
 from tqdm import tqdm
+from pathlib import Path
+import pprint
 
 MODEL_2_KEY = {
     'all-distilroberta-v1':'dist_rob' # This model is a distilled version of Roberta finetuned on several IR taks.
@@ -55,6 +57,7 @@ def calculate_similarities(batch_size, sentences_info, model_name, metric):
         sentences_info (dict): An updated dictionary of a dictionary containing sentence information with similarity scores added.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f'device {device}')
     model = SentenceTransformer(model_name, device=device)
     new_info_key = f'{MODEL_2_KEY[model_name]}_{metric}' # name of the new key about similarities
 
@@ -80,32 +83,81 @@ def calculate_similarities(batch_size, sentences_info, model_name, metric):
             sentences_info[sent_id][new_info_key] = cur_score
             scores_list.append(cur_score)
 
-    # Calculate average and standard deviation
     avg_score = np.mean(scores_list)
     std_score = np.std(scores_list)
-    print(f'Average similarity ', avg_score, ' std ', std_score)
 
-    return sentences_info
+    return sentences_info, avg_score, std_score
+
+def get_all_pickles():
+    # Define the directory path
+    directory_path = 'generated_text'
+
+    # Create a Path object for the directory
+    directory = Path(directory_path)
+
+    contents = {}
+    # Iterate through the files in the directory and read their contents
+    for file in directory.iterdir():
+        if file.is_file():
+            current_file = load_pickle(file)
+            contents[str(file)] = current_file
+    
+    return contents
 
 def main(args):
-    path = os.path.join('generated_text',args.pickle_name)
-    sentences_info = load_pickle(path) 
+    if args.pickle_name == 'all':
+        dict_pickles = get_all_pickles() 
+    else:
+        path = os.path.join('generated_text',args.pickle_name)
+        dict_pickles = {}
+        dict_pickles[args.pickle_name] = load_pickle(path) 
     
-    preprocessed_sentences_info = preprocess_augmented_labels(sentences_info, train_id2options)
+    # similarity_results = {}
+    all_means = []
+    all_stds = []
+    all_pickle_names = []
+    for pickle_name in dict_pickles:
+        sentences_info = dict_pickles[pickle_name]
+        # remove 'm :' or 'f :' from start
+        sentences_info = remove_start_true_labels(sentences_info)
 
-    sentences_info = calculate_similarities(args.batch_size, preprocessed_sentences_info, args.model_name, args.metric)
-    # we save in the same pickle
-    new_pickle_name = args.pickle_name
-    create_pickle(sentences_info, path)
+        # related to '' and '\n' 
+        preprocessed_sentences_info = preprocess_augmented_labels(sentences_info)
+
+        sentences_info, avg_score, std_score = calculate_similarities(args.batch_size, preprocessed_sentences_info, args.model_name, args.metric)
+        print('*'*12)
+        print(f"{pickle_name}")
+        print("Average: {avg_score:.3f} ± {std_score:.3f}")
+        print('*'*12)
+        all_means.append(avg_score)
+        all_stds.append(std_score)
+        all_pickle_names.append(pickle_name)
+    
+
+    # Sort the lists in descending order based on all_means
+    sorted_indices = sorted(range(len(all_means)), key=lambda i: all_means[i], reverse=True)
+    top3_indices = sorted_indices[:3]
+
+    for i in top3_indices:
+        print("Pickle Name:", all_pickle_names[i])
+        print("Average:", all_means[i])
+        print("Standard Deviation:", all_stds[i])
+        print('*' * 12)
+
+
+    #     # # we save in the same pickle
+    #     # new_pickle_name = args.pickle_name
+    #     # create_pickle(sentences_info, path)
+    # pprint.pprint(similarity_results)
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description="Calculate similarities between sentences using various models and metrics.")
     
     # Argument for the path to the pickle file including the sentence information
-    parser.add_argument("--pickle_name", type=str, default="only_inference_colab_greedy_decoding.pkl", help="Name of the pickle file containing sentence information.")
+    parser.add_argument("--pickle_name", type=str, default="all", help="Name of the pickle file containing sentence information.")
     
     # Argument for batch size
-    parser.add_argument("--batch_size", type=int, default=2, help="Batch size for similarity calculations.")
+    parser.add_argument("--batch_size", type=int, default=64, help="Batch size for similarity calculations.")
     
     # Argument for the model name
     parser.add_argument("--model_name", type=str, default="all-distilroberta-v1", help="Name of the model to use for similarity calculations. \
