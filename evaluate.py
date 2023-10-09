@@ -82,7 +82,7 @@ def evaluate_data(model, data_loader, config, device):
     avg_loss = total_loss / len(data_loader)
     model.train()
 
-    return preds, labels, avg_loss, metrics
+    return preds, labels, avg_loss, metrics, sorted_data
 
 def group_data(sentence_ids, option_ids, probabilities, labels):
     """

@@ -1,11 +1,13 @@
 from copy import deepcopy
 import re
 import numpy as np
+import nltk
 from nltk.tokenize import sent_tokenize
 turn_start = [
     'f :',
     'm :',
 ]
+nltk.download('punkt')
 
 DELIMETERS = [".", "!", "?",". ", "! ", "? "]
 

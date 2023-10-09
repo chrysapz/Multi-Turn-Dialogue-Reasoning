@@ -15,7 +15,7 @@ from evaluate import evaluate_data, calculate_probs, group_data, sort_grouped_da
 from time import gmtime, strftime
 from tqdm import tqdm
 from collections import defaultdict
-from utils import calculate_true_label_probs, repeat_training_data, add_augmented_to_training_data, load_pickle, count_true_label_correct, calculate_mean, calculate_variability, print_args, create_pickle, create_dicts_from_tuples
+from utils import calculate_true_label_probs, repeat_golds_training_data, repeat_training_data_based_on_sim, add_augmented_as_gold, add_augmented_label_based_on_sim, load_pickle, count_true_label_correct, calculate_mean, calculate_variability, print_args, create_pickle, create_dicts_from_tuples
 import pandas as pd
 import argparse
 from similarities import calculate_similarities, get_sim_key
@@ -23,6 +23,10 @@ import pickle
 from manual_filtering import preprocess_augmented_labels, remove_last_sentence, add_start_to_augmented_labels, length_statistics, remove_using_similarity
 
 NUM_TRAIN_EXAMPLES = 6000
+repeat_type = {'sim': repeat_training_data_based_on_sim,
+   'gold': repeat_golds_training_data
+}
+
 
 def train(model, train_loader, dev_loader, optimizer, config, device):
     """
@@ -103,7 +107,7 @@ def train(model, train_loader, dev_loader, optimizer, config, device):
         epoch_loss.append(avg_train_loss)
         print(f"Epoch {epoch+1}/{epochs} | Training Loss: {avg_train_loss}")
 
-        eval_preds, eval_labels, eval_loss, metrics = evaluate_data(model, dev_loader, config, device)
+        eval_preds, eval_labels, eval_loss, metrics, sorted_data = evaluate_data(model, dev_loader, config, device)
         if metrics['r1'] > best_r1 or config['debug']:
             best_model = deepcopy(model)
             best_epoch = epoch
@@ -184,6 +188,7 @@ def main(config):
         pickle_path = os.path.join('generated_text',config['augment'])
         generated_info = load_pickle(pickle_path)
         print('add start remove new line')
+        # REMOVE '\n', truncate last and remove whole empty
         preprocessed_generated_info = preprocess_augmented_labels(generated_info)
 
         ratios = length_statistics(tokenizer, preprocessed_generated_info)
@@ -191,22 +196,36 @@ def main(config):
         new_generated_info = add_start_to_augmented_labels(preprocessed_generated_info, train_id2options)
 
         if config['sim']:
+            print('with cosine similarity we consider generated augmented data with cosine > mean as gold otherwise they are noisy')
             model_name = 'all-distilroberta-v1'
             metric =  'cosine'
             sim_key = get_sim_key(model_name, metric)
             new_generated_info, avg_score, std_score, _,_,_, _ = calculate_similarities(64, new_generated_info, model_name, metric)
-            new_generated_info = remove_using_similarity(new_generated_info, avg_score, sim_key)
+            # new_generated_info = remove_using_similarity(new_generated_info, avg_score, sim_key, config['consider_only_gold'])
+            train_id2options, train_id2label_id, new_generated_info = add_augmented_label_based_on_sim(new_generated_info, train_id2options, train_id2label_id, avg_score)
             print('*'*12)
-            print(f'number of new examples we are going to add: {len(new_generated_info)} ')
-
+            print(f'number of new examples we are going to add: {len(new_generated_info)} ') # assume 1 per sent_id!
+            print('without cosine similarity we consider all generated augmented data as gold')
+            new_pickle_name = 'sim_'+config['augment'] 
+            create_pickle(new_generated_info, new_pickle_name)
         # generated_info = preprocess_augmented_labels(generated_info, train_id2options)
         # print('remove last sentence')
         # generated_info = remove_last_sentence(generated_info)
-        train_id2options, train_id2label_id = add_augmented_to_training_data(new_generated_info, train_id2options, train_id2label_id, config['consider_gold'])
+        else:
+            #! without sim filtering means that we consider everything as gold
+            print('without cosine similarity we consider all generated augmented data as gold')
+            train_id2options, train_id2label_id = add_augmented_as_gold(new_generated_info, train_id2options, train_id2label_id)
+            new_pickle_name = 'manually_'+config['augment'] 
+            create_pickle(new_generated_info, new_pickle_name)
         # train_id2history = create_dicts_from_tuples(train_samples, train_random_indices)
 
-    if config['repeat'] > 0:
-        train_id2options, train_id2label_id = repeat_training_data(train_id2options, train_id2label_id, number = config['repeat'])
+    if config['repeat_pickle'] is not None:
+        preprocessed_generated_info = load_pickle(config['repeat_pickle'])
+
+        if config['repeat_type']=='sim':
+            train_id2options, train_id2label_id = repeat_training_data_based_on_sim(train_id2options, train_id2label_id, preprocessed_generated_info)
+        elif config['repeat_type']=='gold': # we consider everything as gold
+            train_id2options, train_id2label_id = repeat_golds_training_data(train_id2options, train_id2label_id, preprocessed_generated_info)
 
     if config['debug']:
         train_k_ids = [2650, 2868]
@@ -229,9 +248,9 @@ def main(config):
     print(f'len training set {len(train_id2history)} len val set {len(val_id2history)} len test set {len(test_id2history)}')
 
     # tokenize and create datasets for training and eval datat
-    train_dataset = MutualDataset(train_id2history, train_id2options, train_id2label_id, tokenizer, config['max_seq_length'], config['repeat'])
-    dev_dataset = MutualDataset(val_id2history, val_id2options, val_id2label_id, tokenizer, config['max_seq_length'], repeat=False)
-    test_dataset = MutualDataset(test_id2history, test_id2options, test_id2label_id, tokenizer, config['max_seq_length'], repeat=False)
+    train_dataset = MutualDataset(train_id2history, train_id2options, train_id2label_id, tokenizer, config['max_seq_length'])
+    dev_dataset = MutualDataset(val_id2history, val_id2options, val_id2label_id, tokenizer, config['max_seq_length'])
+    test_dataset = MutualDataset(test_id2history, test_id2options, test_id2label_id, tokenizer, config['max_seq_length'])
 
     # create the model
     model = AutoModelForSequenceClassification.from_pretrained(config['model_name'], num_labels = 2)
@@ -267,7 +286,25 @@ def main(config):
     #! be cautious not to exhaust memory since we save it every time
     if not config['debug']:
         out_dir = config['out_dir']
-        checkpoint_name = get_checkpoint_name(config)
+
+
+        # name =''
+
+        # if config['augment'] is None:
+        #     name += config['repeat_type']
+        # if config['augment'] is not None:
+        #     name += config['augment'][:-4]+'_'
+        # else:
+        #     name = 'baseline'
+
+        # if config['sim']: 
+        #     name += 'sim'
+
+    
+        # if config['augment'] is None and config['repeat'] == 0:
+        #     name = 'baseline'
+
+        checkpoint_name = 'baseline' #get_checkpoint_name(config)
         save_folder = os.path.join(out_dir, checkpoint_name)
         if not os.path.exists(save_folder):
             os.makedirs(save_folder)
@@ -280,7 +317,7 @@ def main(config):
         checkpoint = torch.load(save_name)
         model.load_state_dict(checkpoint['model_state_dict'])
         model = model.to(device)
-        evaluate_data(model, test_loader, config, device)
+        preds, labels, avg_loss, metrics, sorted_data = evaluate_data(model, test_loader, config, device)
 
         # save loss
         out_path = os.path.join(save_folder, "training_loss.png")
@@ -296,6 +333,11 @@ def main(config):
 
         path_correctness_pickle = os.path.join(save_folder, f'correctness.pkl')
         create_pickle(correctness, path_correctness_pickle)
+
+        path_probs_pickle = os.path.join(save_folder, f'dict_probs.pkl')
+        create_pickle(sorted_data, path_probs_pickle)
+
+
 
 
 
@@ -343,18 +385,23 @@ def parse_option():
     parser.add_argument("--max_seq_length", type=int, default=256)
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--learning_rate", type=float, default=3e-5)
-    parser.add_argument("--epochs", type=int, default=4)
+    parser.add_argument("--epochs", type=int, default=6)
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--adam_epsilon", type=float, default=1e-8)
     parser.add_argument("--warmup_steps", type=int, default=0)
     parser.add_argument("--max_grad_norm", type=float, default=1.0)
     parser.add_argument("--calculate_probs", type=bool, default=True)
-    parser.add_argument("--consider_gold", action='store_true',help='default is to consider the augmented labels as noisy')
+    # parser.add_argument("--consider_only_gold", action='store_true',help='default is to consider the augmented labels as noisy')
     parser.add_argument('--debug', action='store_true',help='default is not to debug')
     parser.add_argument('--sim', action='store_true',help='default is not to filter using similarities')
     #todo
-    parser.add_argument('--repeat', type=int, default=0, help='default is not to repeat training data')
+    # parser.add_argument('--repeat', type=int, default=0, help='default is not to repeat training data')
+    parser.add_argument('--repeat_type', type=str,default='gold',
+                         help='default is repeat based on gold. The other option is to repeat based on similarity')
+    
+    parser.add_argument('--repeat_pickle', type=str,default=None,
+                         help='default is not to repeat data')
     parser.add_argument('--augment', type=str,default=None,
                          help='default is not to augment training data')
 
