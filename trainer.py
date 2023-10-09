@@ -47,6 +47,7 @@ def train(model, train_loader, dev_loader, optimizer, config, device):
     true_label_dict_probs = defaultdict(list)
     count_true_pred_dict = defaultdict(list)
     numerators = defaultdict(list)
+    no_improvement_count = 0  # Initialize a counter for early stopping
     for epoch in tqdm(range(epochs)):
         model.train()
         total_loss = 0.0
@@ -101,6 +102,13 @@ def train(model, train_loader, dev_loader, optimizer, config, device):
             best_epoch = epoch
             best_optimizer = deepcopy(optimizer)
             best_r1 = metrics['r1']
+            no_improvement_count = 0  # Reset the counter
+        else:
+            no_improvement_count += 1
+
+        if no_improvement_count >= 3:
+            print(f"Early stopping triggered after {no_improvement_count} epochs of no improvement.")
+            break
     
     confidence = calculate_mean(true_label_dict_probs)
     variability = calculate_variability(true_label_dict_probs, confidence)
