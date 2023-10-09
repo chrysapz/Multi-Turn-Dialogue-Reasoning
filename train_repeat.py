@@ -3,9 +3,8 @@ import torch
 import numpy as np
 import json
 from copy import deepcopy
-import transformers
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, \
-    AutoModelForMultipleChoice, DataCollatorWithPadding, AutoModelForCausalLM, RobertaTokenizerFast
+    DataCollatorWithPadding,  RobertaTokenizerFast
 from torch.utils.data import DataLoader
 from utils import set_seed, get_checkpoint_name
 from data import load_all_samples
@@ -15,12 +14,12 @@ from evaluate import evaluate_data, calculate_probs, group_data, sort_grouped_da
 from time import gmtime, strftime
 from tqdm import tqdm
 from collections import defaultdict
-from utils import calculate_true_label_probs, repeat_golds_training_data, repeat_training_data_based_on_sim, add_augmented_as_gold, add_augmented_label_based_on_sim, load_pickle, count_true_label_correct, calculate_mean, calculate_variability, print_args, create_pickle, create_dicts_from_tuples
+from utils import repeat_golds_training_data, repeat_training_data_based_on_sim, load_pickle,  print_args, create_pickle, create_dicts_from_tuples, create_sub_dict
 import pandas as pd
 import argparse
-from similarities import calculate_similarities, get_sim_key
-from manual_filtering import preprocess_augmented_labels, add_start_to_augmented_labels, length_statistics
 from trainer import train
+
+
 
 NUM_TRAIN_EXAMPLES = 6000
 repeat_type = {'sim': repeat_training_data_based_on_sim,
@@ -28,37 +27,14 @@ repeat_type = {'sim': repeat_training_data_based_on_sim,
 }
 
 
-def create_sub_dict(id2history, id2options, id2label_id, k_ids):
-    """
-    For debugging, create sub-dictionaries from input dictionaries based on a list of selected keys.
-
-    Args:
-        id2history (dict): A dictionary mapping IDs to history data.
-        id2options (dict): A dictionary mapping IDs to options data.
-        id2label_id (dict): A dictionary mapping IDs to label IDs.
-        k_ids (list): A list of keys (IDs) to select from the input dictionaries.
-
-    Returns:
-        tuple: A tuple containing three dictionaries:
-            - sub_id2history (dict): A sub-dictionary containing selected history data.
-            - sub_id2options (dict): A sub-dictionary containing selected options data.
-            - sub_id2label_id (dict): A sub-dictionary containing selected label IDs.
-    """
-    sub_id2history = {id: id2history[id] for id in k_ids}
-    sub_id2options = {id: id2options[id] for id in k_ids}
-    sub_id2label_id = {id: id2label_id[id] for id in k_ids}
-
-    return sub_id2history, sub_id2options, sub_id2label_id
-
 def main(config):
     print('Training')
     print_args(args)
     config = vars(args) # convert to dict
-    config['sim']  =True
-    config['repeat_type']= 'gold'
-    config['debug'] = True
-    out_dir = config['out_dir']
-    # config['augment'] = 'finetuned.pkl'
+    # config['sim']  =True
+    # config['repeat_pickle'] = None#'sim_inference.pkl' #os.path.join('pickles','sim_augment_inference.pkl')
+    # config['repeat_type']= 'gold'
+    # config['debug'] = True
     # Set up the data directory and device
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -66,10 +42,10 @@ def main(config):
     set_seed(config['seed'])
 
     checkpoint_name = get_checkpoint_name(config)
+    out_dir = config['out_dir']
     save_folder = os.path.join(out_dir, checkpoint_name)
     if config['debug']:
         save_folder = os.path.join(save_folder, 'debug')
-        config['epochs']=2
 
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
@@ -96,50 +72,20 @@ def main(config):
     test_indices = list(range(len(test_samples)))
     test_id2history, test_id2options, test_id2label_id = create_dicts_from_tuples(test_samples, test_indices)
 
-    if config['augment'] is not None:
-        pickle_path = os.path.join('generated_text',config['augment'])
-        generated_info = load_pickle(pickle_path)
-        print('add start remove new line')
-        # REMOVE '\n', truncate last and remove whole empty
-        preprocessed_generated_info = preprocess_augmented_labels(generated_info)
 
-        ratios = length_statistics(tokenizer, preprocessed_generated_info)
-        # add 'm :' or f :' to generated
-        new_generated_info = add_start_to_augmented_labels(preprocessed_generated_info, train_id2options)
+    if config['repeat_pickle'] is not None:
+        preprocessed_generated_info = load_pickle(config['repeat_pickle'])
 
-        if config['sim']:
-            print('with cosine similarity we consider generated augmented data with cosine > mean as gold otherwise they are noisy')
-            model_name = 'all-distilroberta-v1'
-            metric =  'cosine'
-            sim_key = get_sim_key(model_name, metric)
-            # add new key for every sentence about the similarity between the label and the generated
-            new_generated_info, avg_score, std_score, _,_,_, _ = calculate_similarities(64, new_generated_info, model_name, metric)
-   
-            train_id2options, train_id2label_id, new_generated_info = add_augmented_label_based_on_sim(new_generated_info, train_id2options, train_id2label_id, avg_score)
-            print('*'*12)
-            print(f'number of new examples we are going to add: {len(new_generated_info)} ') # assume 1 per sent_id!
-            print('without cosine similarity we consider all generated augmented data as gold')
-            new_pickle_name = 'sim_'+config['augment'] 
-            print(f'write pickle in the current path named {new_pickle_name}')
-            out_path = os.path.join(save_folder, new_pickle_name)
-            create_pickle(new_generated_info, new_pickle_name)
-        # generated_info = preprocess_augmented_labels(generated_info, train_id2options)
-        # print('remove last sentence')
-        # generated_info = remove_last_sentence(generated_info)
-        else:
-            #! without sim filtering means that we consider everything as gold
-            print('without cosine similarity we consider all generated augmented data as gold')
-            train_id2options, train_id2label_id = add_augmented_as_gold(new_generated_info, train_id2options, train_id2label_id)
-            new_pickle_name = 'manually_'+config['augment'] 
-            print(f'write pickle in the current path named {new_pickle_name}')
-            out_path = os.path.join(save_folder, new_pickle_name)
-            create_pickle(new_generated_info, new_pickle_name)
-        # train_id2history = create_dicts_from_tuples(train_samples, train_random_indices)
+        if config['repeat_type']=='sim':
+            train_id2options, train_id2label_id = repeat_training_data_based_on_sim(train_id2options, train_id2label_id, preprocessed_generated_info)
+        elif config['repeat_type']=='gold': # we consider everything as gold
+            train_id2options, train_id2label_id = repeat_golds_training_data(train_id2options, train_id2label_id, preprocessed_generated_info)
 
     if config['debug']:
         train_k_ids = [2650, 2868]
         test_k_ids = [2,1]
         val_k_ids = [2860,5806]
+        config['epochs']=2
 
         train_id2history, train_id2options, train_id2label_id = create_sub_dict(train_id2history, train_id2options, train_id2label_id, train_k_ids)
         val_id2history, val_id2options, val_id2label_id = create_sub_dict(val_id2history, val_id2options, val_id2label_id, val_k_ids)
@@ -189,7 +135,6 @@ def main(config):
     # Save the model
     #! be cautious not to exhaust memory since we save it every time
     if not config['debug']:
-        out_dir = config['out_dir']
 
         save_name = os.path.join(save_folder, 'model')
 
@@ -223,8 +168,8 @@ def main(config):
 
         json_name = os.path.join(save_folder,'config.json')
         with open(json_name, "w") as json_file:
-                json.dump(config, json_file)
-    
+            json.dump(config, json_file)
+
 def load_config(path):
     """
     Load a configuration from a JSON file.
@@ -265,8 +210,11 @@ def parse_option():
     parser.add_argument('--sim', action='store_true',help='default is not to filter using similarities')
     #todo
     # parser.add_argument('--repeat', type=int, default=0, help='default is not to repeat training data')
-    parser.add_argument('--augment', type=str,default=None,
-                         help='default is not to augment training data')
+    parser.add_argument('--repeat_type', type=str,default='gold',
+                         help='default is repeat based on gold. The other option is to repeat based on similarity')
+    
+    parser.add_argument('--repeat_pickle', type=str,default=None,
+                         help='default is not to repeat data. The repeat_pickle file should contain the similarities')
 
     # Parse the command-line arguments
     args = parser.parse_args()

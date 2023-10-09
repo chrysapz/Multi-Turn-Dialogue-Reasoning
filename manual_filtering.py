@@ -27,8 +27,8 @@ def truncate_last_sentence(text):
 
         # Reconstruct the text with truncated last sentence.
         truncated_text = ' '.join(sentences[:-1])
-        if removed_flag:
-            print(last_sentence)
+        # if removed_flag:
+        #     print(last_sentence)
 
     return truncated_text, removed_flag
                               
@@ -57,7 +57,7 @@ def add_start_to_augmented_labels(generated_info, train_id2options):
     '''
     add_start_generated_info = {} 
     for sent_id in generated_info:
-        generated_text = generated_info[sent_id]['gen_text'] # string 
+        generated_text = generated_info[sent_id]['gen_text'].strip() # string 
         # if initial_generated_text == '': 
         #     counter_empty += 1
         #     continue # we won't add this generated txt

@@ -161,44 +161,47 @@ def add_augmented_label_based_on_sim(generated_info, train_id2options, train_id2
         dict: The updated `train_id2options` dictionary with augmented data labels.
     
     Note:
-        if cosine > avg_cosine add consider it as gold label otherwise as noisy
+        if cosine > avg_cosine consider it as gold label so we add it to train_id2label_id, train_id2options
+        otherwise as noisy and we add it to train_id2options only
     """
     new_generated_info = deepcopy(generated_info)
+    new_train_id2options = deepcopy(train_id2options)
+    new_train_id2label_id = deepcopy(train_id2label_id)
+    count_bigger = 0
+    count_smaller = 0
     for sent_id in generated_info:
         generated_text = generated_info[sent_id]['gen_text']
         #! assume that we only generate one text for the same sentence
         # add it to the options
-        train_id2options[sent_id].append(generated_text)
+        new_train_id2options[sent_id].append(generated_text)
 
         cur_cos = generated_info[sent_id]['dist_rob_cosine']
 
         if cur_cos > avg_score: # add it to the true labels
-            train_id2label_id[sent_id].append(len(train_id2options[sent_id])-1)
+            new_train_id2label_id[sent_id].append(len(new_train_id2options[sent_id])-1) # add what is the relevant option id
             new_generated_info[sent_id]['greater_mean'] = True
+            count_bigger +=1
         else:
             new_generated_info[sent_id]['greater_mean'] = False
+            count_smaller +=1
+    
+    print(f'bigger than mean {count_bigger} smaller than mean {count_smaller}')
 
-    return train_id2options, train_id2label_id, new_generated_info
+    return new_train_id2options, new_train_id2label_id, new_generated_info
 
 def get_random_number_not_equal_to_given(list_of_numbers, given_number):
     while True:
-        random_number = random.choice(list_of_numbers)
-        if random_number != given_number:
+        random_number = random.choice(list_of_numbers) # returns random number from a sequence
+        if random_number != list_of_numbers[given_number]:
             return random_number
 
 def repeat_training_data_based_on_sim(train_id2options, train_id2label_id, generated_info):
     """
-    Add augmented data to dictionaries of training examples.
+    if the generated text cosine was greater than the mean cosine we will repeat the gold label.
+    Otherwise, we will consider it as noisy.
 
-    Args:
-        train_id2options (dict): A dictionary of training examples, where keys
-            are sentence IDs and values are lists of options. The generated
-            text will be appended to the list of options for each sentence ID.
-        train_id2label_id (dict): A dictionary of training examples, where keys
-            are sentence IDs and values are lists of true label_ids. 
-        generated_info :
-    Returns:
-        dict: The updated `train_id2options` dictionary with augmented data labels.
+    Note:
+        generated_info should contain the 'greater_mean' key
     """
     # Randomly select k keys from the dictionary
     repeated_train_id2options = deepcopy(train_id2options)
@@ -215,19 +218,42 @@ def repeat_training_data_based_on_sim(train_id2options, train_id2label_id, gener
 
         assert(len(label_ids) ==1)
         label_id = label_ids[0]
-        # for label_id in label_ids: # 1 element
         if is_gold:
             true_label = existing_options_texts[label_id]
+            # add option
             repeated_train_id2options[sent_id].append(true_label)
-            repeated_train_id2label_id[sent_id].append(label_id)
+            # add label
+            repeated_train_id2label_id[sent_id].append(len(repeated_train_id2options[sent_id])-1)
         else:
             #! we don't put it to the correct options
             # put random label not the correct one
             random_noisy_label = get_random_number_not_equal_to_given(existing_options_texts, label_id)
+            # add option
             repeated_train_id2options[sent_id].append(random_noisy_label)
 
     return repeated_train_id2options, repeated_train_id2label_id
 
+def create_sub_dict(id2history, id2options, id2label_id, k_ids):
+    """
+    For debugging, create sub-dictionaries from input dictionaries based on a list of selected keys.
+
+    Args:
+        id2history (dict): A dictionary mapping IDs to history data.
+        id2options (dict): A dictionary mapping IDs to options data.
+        id2label_id (dict): A dictionary mapping IDs to label IDs.
+        k_ids (list): A list of keys (IDs) to select from the input dictionaries.
+
+    Returns:
+        tuple: A tuple containing three dictionaries:
+            - sub_id2history (dict): A sub-dictionary containing selected history data.
+            - sub_id2options (dict): A sub-dictionary containing selected options data.
+            - sub_id2label_id (dict): A sub-dictionary containing selected label IDs.
+    """
+    sub_id2history = {id: id2history[id] for id in k_ids}
+    sub_id2options = {id: id2options[id] for id in k_ids}
+    sub_id2label_id = {id: id2label_id[id] for id in k_ids}
+
+    return sub_id2history, sub_id2options, sub_id2label_id
 
 def repeat_golds_training_data(train_id2options, train_id2label_id, generated_info):
     """
@@ -239,7 +265,7 @@ def repeat_golds_training_data(train_id2options, train_id2label_id, generated_in
             text will be appended to the list of options for each sentence ID.
         train_id2label_id (dict): A dictionary of training examples, where keys
             are sentence IDs and values are lists of true label_ids. 
-        generated_info :
+        generated_info (dict): 
     Returns:
         dict: The updated `train_id2options` dictionary with augmented data labels.
     """
@@ -256,18 +282,19 @@ def repeat_golds_training_data(train_id2options, train_id2label_id, generated_in
         label_ids = train_id2label_id[sent_id]
         existing_options_texts = train_id2options[sent_id]
         for label_id in label_ids: # assume 1
-            true_label = existing_options_texts[label_id]
-
-            repeated_train_id2options[sent_id].append(true_label)
-            repeated_train_id2label_id[sent_id].append(label_id)
+            true_label_txt = existing_options_texts[label_id]
+            # add option
+            repeated_train_id2options[sent_id].append(true_label_txt)
+            # add to labels
+            repeated_train_id2label_id[sent_id].append(len(repeated_train_id2options[sent_id])-1)
             i+=1
-    print(i)
+    print(f'{i} = number of repetitions')
     return repeated_train_id2options, repeated_train_id2label_id
         # train_id2options[sent_id].append(generated_text)
         # if consider_gold:
         #     train_id2label_id[sent_id].append(len(train_id2options[sent_id])-1)
 
-    return train_id2options, train_id2label_id
+    # return train_id2options, train_id2label_id
 
 def RPF1_binary(preds, labels):
     threshold = 0.5
