@@ -143,8 +143,8 @@ def main(config):
         print('Test...')
         model = AutoModelForSequenceClassification.from_pretrained(config['model_name'], num_labels = 2)
         # load the model we just trained
-        checkpoint = torch.load(save_name)
-        model.load_state_dict(checkpoint['model_state_dict'])
+        # checkpoint = torch.load(save_name)
+        model.load_state_dict(model_info['model_state_dict'])
         model = model.to(device)
         preds, labels, avg_loss, metrics, grouped_data = evaluate_data(model, test_loader, config, device)
 
