@@ -1,13 +1,11 @@
-name: nlp
+name: nlp2
 channels:
   - pytorch
-  - nvidia
   - conda-forge
   - defaults
 dependencies:
   - python
   - pip
-  - pytorch-cuda
   - pytorch
   - pip:
     - transformers
