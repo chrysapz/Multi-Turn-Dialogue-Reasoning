@@ -1,4 +1,4 @@
-name: nlp2
+name: bits_nlp
 channels:
   - pytorch
   - conda-forge
@@ -13,3 +13,8 @@ dependencies:
     - tqdm
     - matplotlib
     - numpy
+    - bitsandbytes
+    - accelerate
+    - pandas
+    - seaborn
+    - sentence-transformers
