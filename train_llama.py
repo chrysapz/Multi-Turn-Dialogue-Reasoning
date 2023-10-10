@@ -9,8 +9,8 @@ from torch.utils.data import DataLoader
 from utils import set_seed, print_args
 from data import load_all_samples
 import matplotlib.pyplot as plt
-from llama_tokenize import Llama_dataset, Llama_with_sent_ids_dataset
-from llama_collator import LLama_DataCollatorForLanguageModeling
+from llama_tokenize import Llama_dataset, Llama_with_sent_ids_dataset, Llama_next_word_dataset
+from llama_collator import LLama_DataCollatorForLanguageModeling, DataCollatorForLanguageModeling
 import random
 import pickle
 import argparse
@@ -181,8 +181,8 @@ def main(args):
     print_args(args)
     config = vars(args) # convert to dict
     # config['debug'] = True
-    # config['do_train'] = False
-
+    # config['do_train'] = True
+    # config['use_context'] = True
 
 
     # Read the serialized data from the file and deserialize it
@@ -225,16 +225,26 @@ def main(args):
             kwargs['quantization_config'] = bnb_config
         else: 
             kwargs['load_in_8bit'] =True
-        model = AutoModelForCausalLM.from_pretrained(config['model_name'], token = MY_TOKEN, device_map="auto", **kwargs)
+        model = AutoModelForCausalLM.from_pretrained(config['model_name'], token = MY_TOKEN, device_map="auto", torch_dtype=torch.bfloat16, **kwargs)
     else:
         print('We are in debug mode so we take only the first few sentences')
         shuffled_train_samples =  shuffled_train_samples[:10]
         shuffled_dev_samples =  shuffled_dev_samples[:10]
         config['batch_size'] = 2
-        model = AutoModelForCausalLM.from_pretrained('gpt2', device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained('gpt2', device_map="auto",torch_dtype=torch.bfloat16)
 
-    train_dataset = Llama_dataset(tokenizer, shuffled_train_samples, do_generate=False, use_context=config['use_context'])
-    dev_dataset = Llama_dataset(tokenizer, shuffled_dev_samples, do_generate=False,use_context=config['use_context'])
+    if config['use_context']:
+        train_dataset = Llama_next_word_dataset(tokenizer, shuffled_train_samples, do_generate=False, use_context=config['use_context'])
+        dev_dataset = Llama_next_word_dataset(tokenizer, shuffled_dev_samples, do_generate=False,use_context=config['use_context'])
+        train_collate_fn = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, mlm=False)
+        dev_collate_fn = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, mlm=False)
+    else:
+        train_dataset = Llama_dataset(tokenizer, shuffled_train_samples, do_generate=False, use_context=config['use_context'])
+        dev_dataset = Llama_dataset(tokenizer, shuffled_dev_samples, do_generate=False,use_context=config['use_context'])
+        train_collate_fn = LLama_DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
+        dev_collate_fn = LLama_DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
+        
+
     # Resize token embeddings to accommodate the pad_token
     model.resize_token_embeddings(model.config.vocab_size + 1) # because we added pad_token
 
@@ -243,7 +253,7 @@ def main(args):
         model = prepare_model_for_int8_training(model)
 
     # here we define the modules we use for LORA
-    target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj'] if 'llama' in config['model_name'] and not config['debug'] else None
+    target_modules = ["q_proj", "up_proj", "o_proj", "k_proj", "down_proj", "gate_proj", "v_proj"] if 'llama' in config['model_name'] and not config['debug'] else None
 
     # Configure LORA (Loose Rank Attention) model
     peft_config = LoraConfig(
@@ -258,8 +268,7 @@ def main(args):
     dict_info_for_path['lr'] = config['learning_rate']
     dict_info_for_path['top_p'] = config['top_p']
     # Create data collators for training and development
-    train_collate_fn = LLama_DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
-    dev_collate_fn = LLama_DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
+    
 
     training_arguments = TrainingArguments(
         output_dir=config['out_dir'],
@@ -275,12 +284,14 @@ def main(args):
         save_strategy ='epoch',
         metric_for_best_model="loss",
         optim= optim,
-        greater_is_better = False
+        greater_is_better = False,
+        bf16=True # from https://github.com/huggingface/trl/blob/main/examples/research_projects/stack_llama_2/scripts/sft_llama2.py#L101
     )
 
 
     trainer = Trainer(model, training_arguments, train_dataset=train_dataset,eval_dataset=dev_dataset, data_collator = train_collate_fn,
             tokenizer=tokenizer)
+  
     if config['do_train']: 
         print('Training...')
         trainer.train()
@@ -293,6 +304,7 @@ def main(args):
     dev_ids = indexed_train_list[FINETUNE_SIZE:]
     dev_for_generate = shuffled_samples[FINETUNE_SIZE:]
     dev_dataset = Llama_with_sent_ids_dataset(tokenizer, dev_for_generate, do_generate=True,dev_ids= dev_ids, use_context=config['use_context'])
+    dev_collate_fn = LLama_DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
     dev_loader = DataLoader(dev_dataset, shuffle=False, batch_size=16, collate_fn=dev_collate_fn)
 
     # Perform inference and collect information
@@ -334,8 +346,8 @@ def parse_option():
     parser.add_argument('--warmup_steps', type=int, default=0)
     parser.add_argument('--top_p', type=float, default=1.0)
     # lora hyperparams for parameter efficient finetuning
-    parser.add_argument('--rank', type=int, default=32, help='The bigger, the better, as it allows us to update more parameters, but it also increases memory usage.') 
-    parser.add_argument('--lora_alpha', type=int, default=32)
+    parser.add_argument('--rank', type=int, default=16, help='The bigger, the better, as it allows us to update more parameters, but it also increases memory usage.') 
+    parser.add_argument('--lora_alpha', type=int, default=8)
     parser.add_argument('--lora_dropout', type=float, default=0.05)
     parser.add_argument('--quantize_4bits', action='store_true',help='default is 8bit. If you run the script with --quantize_4bits it will be true else false')
 

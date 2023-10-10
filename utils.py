@@ -61,6 +61,17 @@ def load_pickle(file_path):
         data = pickle.load(file)
     return data
 
+def concat_history_with_true_label(id2history, id2options, id2label_id):
+        concat_sentences = [] 
+        for sent_id in id2history:
+            hist = id2history[sent_id]
+            existing_options = id2options[sent_id]
+            true_label_id = id2label_id[sent_id]
+            assert(len(true_label_id)==1)
+            concat_text = hist+' ' + existing_options[true_label_id[0]]
+            concat_sentences.append(concat_text)
+        return concat_sentences
+
 def create_dicts_from_tuples(samples, indices):
     """
     Create dictionaries from a list of tuples.
@@ -447,6 +458,8 @@ def calculate_mean(true_label_dict_probs):
     for sentence_id in true_label_dict_probs:
         avg_dict_probs[sentence_id] = np.mean(true_label_dict_probs[sentence_id])
     return avg_dict_probs
+
+
 
 
 def calculate_variability(true_label_dict_probs, true_avg_dict_probs):

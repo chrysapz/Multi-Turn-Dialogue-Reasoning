@@ -21,77 +21,8 @@ UNSAFE_ERROR = "Error: special tags are not allowed as part of the prompt."
 
 import torch.utils.data as data
 
-class Llama_dataset(data.Dataset):
-    """
-    Custom PyTorch dataset for handling LLAMA-style dialogue data.
-    
-    Args:
-        tokenizer (AutoTokenizer): The tokenizer for tokenizing text data.
-        split_samples (list): A list of tuples containing label_id, options, and initial_context_history.
-        do_generate (bool): Whether to use model.generate() or not.
-        ignore_context
 
-    Attributes:
-        tokenizer (AutoTokenizer): The tokenizer for tokenizing text data.
-        all_input_ids (list): List of input token IDs for the dataset.
-        all_attention_masks (list): List of attention masks for the dataset.
-        all_labels (list): List of label IDs for the dataset.
-        without_dummy_flag (list): List indicating whether dummy tokens are present in the dataset.
-    """
-    def __init__(self, tokenizer: AutoTokenizer, split_samples, do_generate, use_context):
-        self.tokenizer = tokenizer
-        dialogs, all_answers, without_dummy_flag = self.text2dialogformat(split_samples)
-        all_input_ids, all_attention_masks, all_labels = self.tokenize_text(dialogs, all_answers, do_generate, use_context)
-        self.all_input_ids = all_input_ids
-        self.all_attention_masks = all_attention_masks
-        self.all_labels = all_labels
-        self.without_dummy_flag = without_dummy_flag
-
-    def __len__(self):
-        """
-        Get the number of data points in the dataset.
-
-        Returns:
-            int: Number of data points.
-        """
-        return len(self.all_input_ids)
-
-    def __getitem__(self, idx):
-        """
-        Get a specific data point from the dataset.
-
-        Args:
-            idx (int): Index of the data point to retrieve.
-
-        Returns:
-            tuple: A tuple containing input_ids, attention_mask, and label for the data point.
-        """
-        input_ids = self.all_input_ids[idx]
-        attention_mask = self.all_attention_masks[idx]
-        label = self.all_labels[idx]
-        # return input_ids, attention_mask, label
-        return input_ids, attention_mask, label
-        # return {"input_ids": input_ids, 'attention_mask':attention_mask,'labels': label}
-
-    def preprocess(self, txt):
-        """
-        Split the context history text into sentences, put newline symbol in between. Then, join and strip.
-        See https://huggingface.co/meta-llama/Llama-2-7b-chat about what kind of preprocessing is needed
-
-        Args:
-            txt (str): The text.
-
-        Returns:
-            new_text (str): Preprocessed  text.
-        """
-        split_sentences = re.split(r'(?<=[.!?])\s+', txt)
-
-        new_text = '\n '.join(split_sentences)
-
-        new_text = new_text.strip()
-        return new_text
-
-    def text2dialogformat(self, sentences):
+def text2dialogformat(sentences):
         """ 
         Convert context history to LLAMA dialog format. 
         Check also https://github.com/facebookresearch/llama/blob/main/example_chat_completion.py
@@ -115,12 +46,12 @@ class Llama_dataset(data.Dataset):
         for label_id, options, initial_context_history in sentences:
             unprocessed_correct_option = options[label_id]
 
-            correct_option = self.preprocess(unprocessed_correct_option)
+            correct_option = preprocess(unprocessed_correct_option)
 
             all_answers.append(correct_option[4:])
 
             # add new line at the end of each sentence
-            context_history = self.preprocess(initial_context_history)
+            context_history = preprocess(initial_context_history)
 
             m_positions = [m.start() for m in re.finditer('m :', context_history)]
             f_positions = [m.start() for m in re.finditer('f :', context_history)]
@@ -156,7 +87,25 @@ class Llama_dataset(data.Dataset):
         
         return all_dialogs, all_answers, without_dummy_flag
 
-    def tokenize_add(self, prompt, answer):
+def preprocess(txt):
+    """
+    Split the context history text into sentences, put newline symbol in between. Then, join and strip.
+    See https://huggingface.co/meta-llama/Llama-2-7b-chat about what kind of preprocessing is needed
+
+    Args:
+        txt (str): The text.
+
+    Returns:
+        new_text (str): Preprocessed  text.
+    """
+    split_sentences = re.split(r'(?<=[.!?])\s+', txt)
+
+    new_text = '\n '.join(split_sentences)
+
+    new_text = new_text.strip()
+    return new_text
+
+def tokenize_add(tokenizer, prompt, answer):
         """
         Tokenize for a prompt and answer pair.
         The format of every sentence should be: bos_id B_INST text_1 E_INST text_2 eos_id
@@ -168,14 +117,14 @@ class Llama_dataset(data.Dataset):
         Returns:
             tokenized_text (dict): The tokenized dictionary including the input_ids and the attention_masks as keys
         """
-        tokenized_text = self.tokenizer.encode_plus(
+        tokenized_text = tokenizer.encode_plus(
                         f"{B_INST} {(prompt['content']).strip()} {E_INST} {(answer['content']).strip()} ",add_special_tokens =True)
-        tokenized_text['input_ids'].append(self.tokenizer.eos_token_id)
+        tokenized_text['input_ids'].append(tokenizer.eos_token_id)
         tokenized_text['attention_mask'].append(1)
         return tokenized_text
 
-    def tokenize_text(
-        self,
+def tokenize_text(
+        tokenizer,
         dialogs, labels, do_generate, use_context
     ):
         """
@@ -220,7 +169,7 @@ class Llama_dataset(data.Dataset):
             dialog_tokens: List[int] = sum(
                 [
                     #! eos token id should we also add \n text?
-                    self.tokenize_add(prompt, answer)['input_ids']
+                    tokenize_add(tokenizer,prompt, answer)['input_ids']
                     for prompt, answer in zip(
                         dialog[::2],
                         dialog[1::2],
@@ -233,7 +182,7 @@ class Llama_dataset(data.Dataset):
 
             if len(dialog) % 2 != 0:
                 #! we also add bos id but not eos id
-                last_context_tokens = self.tokenizer.encode(
+                last_context_tokens = tokenizer.encode(
                     f"{B_INST} {(dialog[-1]['content']).strip()} {E_INST}",add_special_tokens=True
                 )
 
@@ -245,13 +194,13 @@ class Llama_dataset(data.Dataset):
             cur_label_ids = []
             # 
             if len(dialog) % 2 == 0: # even context history we use special identifiers
-                cur_label_ids.append(self.tokenizer.bos_token_id)
-                b_inst_ids = self.tokenizer.encode(B_INST, add_special_tokens=False)
+                cur_label_ids.append(tokenizer.bos_token_id)
+                b_inst_ids = tokenizer.encode(B_INST, add_special_tokens=False)
                 cur_label_ids.extend(b_inst_ids)
 
             # add label
-            cur_label_ids.extend(self.tokenizer.encode(label_text.strip() , add_special_tokens=False)  )
-            cur_label_ids.append(self.tokenizer.eos_token_id)
+            cur_label_ids.extend(tokenizer.encode(label_text.strip() , add_special_tokens=False)  )
+            cur_label_ids.append(tokenizer.eos_token_id)
 
             # we add the labels to the input to the model since we are doing next word prediction of the whole sentence during training
             if not do_generate:
@@ -265,6 +214,107 @@ class Llama_dataset(data.Dataset):
             # assert(len(prompt_tokens[-1]) == len(attention_masks[-1]) == len(label_ids[-1]) )
 
         return prompt_tokens, attention_masks, label_ids
+
+
+class Llama_dataset(data.Dataset):
+    """
+    Custom PyTorch dataset for handling LLAMA-style dialogue data.
+    
+    Args:
+        tokenizer (AutoTokenizer): The tokenizer for tokenizing text data.
+        split_samples (list): A list of tuples containing label_id, options, and initial_context_history.
+        do_generate (bool): Whether to use model.generate() or not.
+        ignore_context
+
+    Attributes:
+        tokenizer (AutoTokenizer): The tokenizer for tokenizing text data.
+        all_input_ids (list): List of input token IDs for the dataset.
+        all_attention_masks (list): List of attention masks for the dataset.
+        all_labels (list): List of label IDs for the dataset.
+        without_dummy_flag (list): List indicating whether dummy tokens are present in the dataset.
+    """
+    def __init__(self, tokenizer: AutoTokenizer, split_samples, do_generate, use_context):
+        self.tokenizer = tokenizer
+        dialogs, all_answers, without_dummy_flag = text2dialogformat(split_samples)
+        all_input_ids, all_attention_masks, all_labels = tokenize_text(tokenizer, dialogs, all_answers, do_generate, use_context)
+        self.all_input_ids = all_input_ids
+        self.all_attention_masks = all_attention_masks
+        self.all_labels = all_labels
+        self.without_dummy_flag = without_dummy_flag
+
+    def __len__(self):
+        """
+        Get the number of data points in the dataset.
+
+        Returns:
+            int: Number of data points.
+        """
+        return len(self.all_input_ids)
+
+    def __getitem__(self, idx):
+        """
+        Get a specific data point from the dataset.
+
+        Args:
+            idx (int): Index of the data point to retrieve.
+
+        Returns:
+            tuple: A tuple containing input_ids, attention_mask, and label for the data point.
+        """
+        input_ids = self.all_input_ids[idx]
+        attention_mask = self.all_attention_masks[idx]
+        label = self.all_labels[idx]
+        return input_ids, attention_mask, label
+
+class Llama_next_word_dataset(data.Dataset):
+    """
+    Custom PyTorch dataset for handling LLAMA-style dialogue data.
+    
+    Args:
+        tokenizer (AutoTokenizer): The tokenizer for tokenizing text data.
+        split_samples (list): A list of tuples containing label_id, options, and initial_context_history.
+        do_generate (bool): Whether to use model.generate() or not.
+        ignore_context
+
+    Attributes:
+        tokenizer (AutoTokenizer): The tokenizer for tokenizing text data.
+        all_input_ids (list): List of input token IDs for the dataset.
+        all_attention_masks (list): List of attention masks for the dataset.
+        all_labels (list): List of label IDs for the dataset.
+        without_dummy_flag (list): List indicating whether dummy tokens are present in the dataset.
+    """
+    def __init__(self, tokenizer: AutoTokenizer, split_samples, do_generate, use_context):
+        self.tokenizer = tokenizer
+        dialogs, all_answers, _ = text2dialogformat(split_samples)
+        all_input_ids, _, _ = tokenize_text(tokenizer, dialogs, all_answers, do_generate, use_context)
+        self.all_input_ids = all_input_ids
+        # self.all_attention_masks = all_attention_masks
+        # self.all_labels = all_labels
+        # self.without_dummy_flag = without_dummy_flag
+
+    def __len__(self):
+        """
+        Get the number of data points in the dataset.
+
+        Returns:
+            int: Number of data points.
+        """
+        return len(self.all_input_ids)
+
+    def __getitem__(self, idx):
+        """
+        Get a specific data point from the dataset.
+
+        Args:
+            idx (int): Index of the data point to retrieve.
+
+        Returns:
+            tuple: A tuple containing input_ids, attention_mask, and label for the data point.
+        """
+        input_ids = self.all_input_ids[idx]
+        return input_ids
+        #return input_ids, attention_mask
+        #return {"input_ids": input_ids, 'attention_mask':attention_mask,'labels': label}
 
 # it's not possible to pass sentences_id in the HF trainer so I create a subclass for inference
 class Llama_with_sent_ids_dataset(Llama_dataset):
