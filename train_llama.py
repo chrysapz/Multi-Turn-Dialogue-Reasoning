@@ -182,6 +182,7 @@ def main(args):
     config = vars(args) # convert to dict
     # config['debug'] = True
     # config['do_train'] = True
+    # config['bits'] =16
     # config['use_context'] = True
 
 
@@ -218,20 +219,26 @@ def main(args):
     # quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
     kwargs = {} # different argument based on whether we use 4bits or 8bits
-    optim = "paged_adamw_32bit" if config['quantize_4bits'] and not config['debug'] else "adamw_torch" # default
+    optim = "paged_adamw_32bit" if config['bits'] ==4 and not config['debug'] else "adamw_torch" # default
     if not config['debug']:
-        if config['quantize_4bits']:
+        if config['bits']==4:
             bnb_config = get_quantize_4bits_config()
             kwargs['quantization_config'] = bnb_config
-        else: 
+        elif config['bits']==8: 
             kwargs['load_in_8bit'] =True
-        model = AutoModelForCausalLM.from_pretrained(config['model_name'], token = MY_TOKEN, device_map="auto", torch_dtype=torch.bfloat16, **kwargs)
+        elif config['bits']==16:
+            kwargs['torch_dtype'] = torch.bfloat16
+        model = AutoModelForCausalLM.from_pretrained(config['model_name'], token = MY_TOKEN, device_map="auto", **kwargs)
     else:
         print('We are in debug mode so we take only the first few sentences')
         shuffled_train_samples =  shuffled_train_samples[:10]
         shuffled_dev_samples =  shuffled_dev_samples[:10]
         config['batch_size'] = 2
-        model = AutoModelForCausalLM.from_pretrained('gpt2', device_map="auto",torch_dtype=torch.bfloat16)
+        if config['bits']==8: 
+            kwargs['load_in_8bit'] =True
+        elif config['bits']==16:
+            kwargs['torch_dtype'] = torch.bfloat16
+        model = AutoModelForCausalLM.from_pretrained('gpt2', device_map="auto",**kwargs)
 
     if config['use_context']:
         train_dataset = Llama_next_word_dataset(tokenizer, shuffled_train_samples, do_generate=False, use_context=config['use_context'])
@@ -249,7 +256,7 @@ def main(args):
     model.resize_token_embeddings(model.config.vocab_size + 1) # because we added pad_token
 
     # Prepare the model for INT8 training if not using 4-bit quantization
-    if not config['quantize_4bits']:
+    if config['bits'] == 8:
         model = prepare_model_for_int8_training(model)
 
     # here we define the modules we use for LORA
@@ -269,7 +276,10 @@ def main(args):
     dict_info_for_path['top_p'] = config['top_p']
     # Create data collators for training and development
     
-
+    if config['bits']==16:
+        bf=True
+    else:
+        bf=False
     training_arguments = TrainingArguments(
         output_dir=config['out_dir'],
         per_device_train_batch_size=config['train_batch_size'],
@@ -285,7 +295,7 @@ def main(args):
         metric_for_best_model="loss",
         optim= optim,
         greater_is_better = False,
-        bf16=True # from https://github.com/huggingface/trl/blob/main/examples/research_projects/stack_llama_2/scripts/sft_llama2.py#L101
+        bf16=bf # from https://github.com/huggingface/trl/blob/main/examples/research_projects/stack_llama_2/scripts/sft_llama2.py#L101
     )
 
 
@@ -349,7 +359,7 @@ def parse_option():
     parser.add_argument('--rank', type=int, default=16, help='The bigger, the better, as it allows us to update more parameters, but it also increases memory usage.') 
     parser.add_argument('--lora_alpha', type=int, default=8)
     parser.add_argument('--lora_dropout', type=float, default=0.05)
-    parser.add_argument('--quantize_4bits', action='store_true',help='default is 8bit. If you run the script with --quantize_4bits it will be true else false')
+    parser.add_argument('--bits', type=int,default=8)
 
     # Parse the command line arguments
     parsed_args = parser.parse_args()
