@@ -324,6 +324,7 @@ def main(args):
     else:
         
         dict_info_for_path['train'] = 'not_finetuned'
+    dict_info_for_path['top_p'] = config['top_p']
     trainer.model.eval()
 
     # pass the indices before shuffling
