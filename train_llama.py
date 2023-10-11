@@ -9,15 +9,16 @@ from torch.utils.data import DataLoader
 from utils import set_seed, print_args
 from data import load_all_samples
 import matplotlib.pyplot as plt
-from llama_tokenize import Llama_dataset, Llama_with_sent_ids_dataset, Llama_next_word_dataset
+from llama_tokenize import Llama_dataset, Llama_next_word_dataset
 from llama_collator import LLama_DataCollatorForLanguageModeling, DataCollatorForLanguageModeling
 import random
 import pickle
 import argparse
+from utils import load_pickle, create_pickle
 from tqdm import tqdm
 #! you need pip install accelerate bitsandbytes
 
-def generate_and_collect_info(trainer, dev_loader, tokenizer, device, lora_dict, unshuffled_dev_samples):
+def generate_and_collect_info(trainer, dev_loader, tokenizer, device, lora_dict, unshuffled_dev_samples, dev_ids):
     """
     Generate text sequences using a trained model and save information about the generated sequences.
 
@@ -48,6 +49,8 @@ def generate_and_collect_info(trainer, dev_loader, tokenizer, device, lora_dict,
     context_header = '--------BELOW IS THE CONTEXT HISTORY--------'
     generated_header = '--------BELOW IS THE GENERATED TEXT--------'
     epsilon = 1e-10
+    all_ids = []
+    batch_size = dev_loader.batch_size
     with torch.no_grad():
         for i, batch in tqdm(enumerate(dev_loader)):
             inputs = {key: value.to(device) for key, value in batch.items() if key not in ['sentences_id','without_dummy','labels']} #sentence_id is useful only for metrics
@@ -103,24 +106,29 @@ def generate_and_collect_info(trainer, dev_loader, tokenizer, device, lora_dict,
 
                 print('\n'.join(output))
 
+            cur_dev_ids = dev_ids[i*batch_size:(i+1)*batch_size]
+
+
             batch_generated_info = {
-                  sent_id.item(): {
+                  sent_id: {
                       'gen_text': gen_text,
-                      'perpl': perpl.item(),
-                      'without_dummy': without_dummy.item(),
+                      'perpl': perpl.item()
                   }
               
-              for gen_text, perpl, sent_id, without_dummy
-              in zip(batch_generated_text, perplexity, batch['sentences_id'], batch['without_dummy'])
+              for gen_text, perpl, sent_id
+              in zip(batch_generated_text, perplexity, cur_dev_ids)
             }
             all_generated_info.update(batch_generated_info)
-
+            all_ids.extend(cur_dev_ids)
+            # if i > 2:
+            #     break
+            
     # now we will go the dict we created and add there the true label as well
     for initial_sent_id in all_generated_info:
         
         answers_id, options, article = unshuffled_dev_samples[initial_sent_id]
         true_label_txt = options[answers_id]
-
+        all_generated_info[initial_sent_id]['article'] = article
         all_generated_info[initial_sent_id]['true_label'] = true_label_txt
 
     # for path name
@@ -135,6 +143,10 @@ def generate_and_collect_info(trainer, dev_loader, tokenizer, device, lora_dict,
     save_file_path = os.path.join(directory_path, f'inference_{result_string}.pkl')
     with open(save_file_path, 'wb') as file:
         pickle.dump(all_generated_info, file)
+    
+    ave_file_path = os.path.join(directory_path, f'dev_ids_end.pkl')
+    with open(ave_file_path, 'wb') as file:
+        pickle.dump(all_ids, file)
 
     return all_generated_info
 
@@ -191,6 +203,9 @@ def main(args):
         indexed_train_list = pickle.load(file)
 
     indexed_train_list=indexed_train_list[:6000]
+    print('first 10 elements in indexed_train_list')
+    for i in range(10):
+        print(indexed_train_list[i], end=' ')
     # print(loaded_data) 
 
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
@@ -231,13 +246,13 @@ def main(args):
         model = AutoModelForCausalLM.from_pretrained(config['model_name'], token = MY_TOKEN, device_map="auto", **kwargs)
     else:
         print('We are in debug mode so we take only the first few sentences')
-        shuffled_train_samples =  shuffled_train_samples[:10]
-        shuffled_dev_samples =  shuffled_dev_samples[:10]
+        # shuffled_train_samples =  shuffled_train_samples[:10]
+        # shuffled_dev_samples =  shuffled_dev_samples[:10]
         config['batch_size'] = 2
-        if config['bits']==8: 
-            kwargs['load_in_8bit'] =True
-        elif config['bits']==16:
-            kwargs['torch_dtype'] = torch.bfloat16
+        # if config['bits']==8: 
+        #     kwargs['load_in_8bit'] =True
+        # elif config['bits']==16:
+        #     kwargs['torch_dtype'] = torch.bfloat16
         model = AutoModelForCausalLM.from_pretrained('gpt2', device_map="auto",**kwargs)
 
     if config['use_context']:
@@ -301,25 +316,27 @@ def main(args):
 
     trainer = Trainer(model, training_arguments, train_dataset=train_dataset,eval_dataset=dev_dataset, data_collator = train_collate_fn,
             tokenizer=tokenizer)
-  
+    dict_info_for_path = {}
     if config['do_train']: 
         print('Training...')
         trainer.train()
         dict_info_for_path['train'] = 'finetuned'
     else:
+        
         dict_info_for_path['train'] = 'not_finetuned'
     trainer.model.eval()
 
     # pass the indices before shuffling
     dev_ids = indexed_train_list[FINETUNE_SIZE:]
     dev_for_generate = shuffled_samples[FINETUNE_SIZE:]
-    dev_dataset = Llama_with_sent_ids_dataset(tokenizer, dev_for_generate, do_generate=True,dev_ids= dev_ids, use_context=config['use_context'])
-    dev_collate_fn = LLama_DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
+    dev_dataset =Llama_next_word_dataset(tokenizer, dev_for_generate, do_generate=True, use_context=True) # last argument useless
+    dev_collate_fn = DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
     dev_loader = DataLoader(dev_dataset, shuffle=False, batch_size=16, collate_fn=dev_collate_fn)
 
+    create_pickle(dev_ids,'dev_ids_before.pkl')
     # Perform inference and collect information
     print('Inference...')
-    all_generated_info = generate_and_collect_info(trainer, dev_loader, tokenizer, device,dict_info_for_path, train_samples)
+    all_generated_info = generate_and_collect_info(trainer, dev_loader, tokenizer, device,dict_info_for_path, train_samples, dev_ids)
 
 def load_config(path):
     # Open and read the JSON file

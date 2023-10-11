@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import List, Literal, Optional, Tuple, TypedDict
 import re
 import torch
+from torch.utils.data import DataLoader
 import torch.nn.functional as F
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, DataCollatorForLanguageModeling
 # from llama.tokenizer import Tokenizer
 
 # these are special tokens used by the tokenizer
@@ -317,54 +318,64 @@ class Llama_next_word_dataset(data.Dataset):
         #return {"input_ids": input_ids, 'attention_mask':attention_mask,'labels': label}
 
 # it's not possible to pass sentences_id in the HF trainer so I create a subclass for inference
-class Llama_with_sent_ids_dataset(Llama_dataset):
-    """
-    A dataset class for Llama models with sentence IDs.
+# class Llama_with_sent_ids_dataset(Llama_dataset):
+#     """
+#     A dataset class for Llama models with sentence IDs.
 
-    This class extends the base Llama_dataset class and adds support for including sentence IDs
-    in the dataset.
+#     This class extends the base Llama_dataset class and adds support for including sentence IDs
+#     in the dataset.
 
-    Args:
-        tokenizer (AutoTokenizer): The tokenizer to use for tokenizing the input data.
-        split_samples (list): The split samples for the dataset.
-        do_generate (bool): A flag indicating whether to use model.generate() or not.
-        dev_ids: A list of sentence IDs corresponding to the relevant samples in the dataset.
+#     Args:
+#         tokenizer (AutoTokenizer): The tokenizer to use for tokenizing the input data.
+#         split_samples (list): The split samples for the dataset.
+#         do_generate (bool): A flag indicating whether to use model.generate() or not.
+#         dev_ids: A list of sentence IDs corresponding to the relevant samples in the dataset.
 
-    Attributes:
-        all_sentences_id: A list of sentence IDs corresponding to the relevant samples in the dataset.
-    """
-    def __init__(self, tokenizer: AutoTokenizer, split_samples, do_generate, dev_ids, use_context):
-        """
-        Initialize the Llama_with_sent_ids_dataset.
+#     Attributes:
+#         all_sentences_id: A list of sentence IDs corresponding to the relevant samples in the dataset.
+#     """
+#     def __init__(self, tokenizer: AutoTokenizer, split_samples, do_generate, use_context):
+#         """
+#         Initialize the Llama_with_sent_ids_dataset.
 
-        Args:
-            tokenizer (AutoTokenizer): The tokenizer to use for tokenizing the input data.
-            split_samples: The split samples for the dataset.
-            do_generate (bool): A flag indicating whether to use model.generate() or not.
-            dev_ids: A list of sentence IDs corresponding to the samples in the dataset.
+#         Args:
+#             tokenizer (AutoTokenizer): The tokenizer to use for tokenizing the input data.
+#             split_samples: The split samples for the dataset.
+#             do_generate (bool): A flag indicating whether to use model.generate() or not.
+#             dev_ids: A list of sentence IDs corresponding to the samples in the dataset.
         
-        Note:
-            We pass the dev_ids as they are before shuffling!
-        """
-        super().__init__(tokenizer, split_samples, do_generate, use_context)
-        all_sentences_id = dev_ids
-        self.all_sentences_id = all_sentences_id
+#         Note:
+#             We pass the dev_ids as they are before shuffling!
+#         """
+#         super().__init__(tokenizer, split_samples, do_generate, use_context)
+#         all_sentences_id = dev_ids
+#         self.all_sentences_id = all_sentences_id
 
-    def __getitem__(self, idx):
-        """
-        Get an item from the dataset by index.
+#     def __getitem__(self, idx):
+#         """
+#         Get an item from the dataset by index.
 
-        Args:
-            idx (int): The index of the item to retrieve.
+#         Args:
+#             idx (int): The index of the item to retrieve.
 
-        Returns:
-            tuple: A tuple containing input_ids, attention_mask, label, sentence_id, and without_dummy flag (1 if we didn't add any dummy text at the beginning).
-        """
-        input_ids = self.all_input_ids[idx]
-        attention_mask = self.all_attention_masks[idx]
-        label = self.all_labels[idx]
-        sentence_id = self.all_sentences_id[idx]
-        without_dummy = self.without_dummy_flag[idx]
+#         Returns:
+#             tuple: A tuple containing input_ids, attention_mask, label, sentence_id, and without_dummy flag (1 if we didn't add any dummy text at the beginning).
+#         """
+#         input_ids = self.all_input_ids[idx]
+#         attention_mask = self.all_attention_masks[idx]
+#         label = self.all_labels[idx]
+#         sentence_id = self.all_sentences_id[idx]
+#         without_dummy = self.without_dummy_flag[idx]
 
-        return input_ids, attention_mask, label, sentence_id, without_dummy
+#         return input_ids, attention_mask, label, sentence_id, without_dummy
+    
+# if __name__=='__main__':
+#     tokenizer = AutoTokenizer.from_pretrained('meta-llama/Llama-2-7b-chat-hf',token='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')
+#     #answer index (0-3), a list of answer options, and an article
+#     samples = [[1, ['a ','b'], 'first'], [1, ['c ','d'], 'second'] ]
 
+#     dataset  = Llama_with_sent_ids_dataset(tokenizer, samples, True, [8,10], True)
+#     dev_collate_fn = DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
+#     d= DataLoader(dataset, shuffle=False, batch_size=16, collate_fn=dev_collate_fn)
+#     for batch in d:
+#         a=1
