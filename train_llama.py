@@ -144,7 +144,7 @@ def generate_and_collect_info(trainer, dev_loader, tokenizer, device, lora_dict,
     with open(save_file_path, 'wb') as file:
         pickle.dump(all_generated_info, file)
     
-    ave_file_path = os.path.join(directory_path, f'dev_ids_end.pkl')
+    ave_file_path = os.path.join(directory_path, f'dev_ids_end_{result_string}.pkl')
     with open(ave_file_path, 'wb') as file:
         pickle.dump(all_ids, file)
 
@@ -333,7 +333,7 @@ def main(args):
     dev_collate_fn = DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
     dev_loader = DataLoader(dev_dataset, shuffle=False, batch_size=16, collate_fn=dev_collate_fn)
 
-    create_pickle(dev_ids,'dev_ids_before.pkl')
+    create_pickle(dev_ids,dict_info_for_path['train']+'_dev_ids_before.pkl')
     # Perform inference and collect information
     print('Inference...')
     all_generated_info = generate_and_collect_info(trainer, dev_loader, tokenizer, device,dict_info_for_path, train_samples, dev_ids)
