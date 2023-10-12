@@ -57,8 +57,7 @@ def main(config):
     config = vars(args) # convert to dict
     out_dir = config['out_dir']
     # config['sim']  = False
-    # # config['repeat_type']= 'gold'
-    # # config['debug'] = True
+    # config['debug'] = True
     
     # config['augment'] = 'final_finetuned.pkl'
     # Set up the data directory and device
@@ -203,7 +202,11 @@ def main(config):
         # checkpoint = torch.load(save_name)
         model.load_state_dict(model_info['model_state_dict'])
         model = model.to(device)
-        preds, labels, avg_loss, metrics, grouped_data = evaluate_data(model, test_loader, config, device)
+        preds, labels, avg_loss, metrics, grouped_data, labeled_data = evaluate_data(model, test_loader, config, device)
+
+        # save pickles for confidence, variability and correctness
+        path_confidence_pickle = os.path.join(save_folder, f'labeled_data.pkl')
+        create_pickle(labeled_data, path_confidence_pickle)
 
         # save loss
         out_path = os.path.join(save_folder, "training_loss.png")

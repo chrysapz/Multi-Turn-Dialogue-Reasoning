@@ -31,6 +31,7 @@ def main(config):
     print('Training')
     print_args(args)
     config = vars(args) # convert to dict
+
     # config['sim']  =True
     # config['repeat_pickle'] = None#'sim_inference.pkl' #os.path.join('pickles','sim_augment_inference.pkl')
     # config['repeat_type']= 'gold'
@@ -56,16 +57,20 @@ def main(config):
     # Load training and val data
     initial_train_samples = load_all_samples(base_dir, 'train')
     # Read the serialized data from the file and deserialize it
-    indexed_train_list = load_pickle('index_list.pkl')
+    train_random_indices = load_pickle('random_ids.pkl')
+    val_random_indices = load_pickle('val_random_ids.pkl')
 
-    shuffled_samples = [initial_train_samples[i] for i in indexed_train_list]
+    train_samples = [initial_train_samples[i] for i in train_random_indices]
+    dev_samples = [initial_train_samples[i] for i in val_random_indices]
 
-    train_samples = shuffled_samples[:NUM_TRAIN_EXAMPLES]
-    train_random_indices = indexed_train_list[:NUM_TRAIN_EXAMPLES]
+    # shuffled_samples = [initial_train_samples[i] for i in indexed_train_list]
+
+    # train_samples = shuffled_samples[:NUM_TRAIN_EXAMPLES]
+    # train_random_indices = indexed_train_list[:NUM_TRAIN_EXAMPLES]
     train_id2history, train_id2options, train_id2label_id = create_dicts_from_tuples(train_samples, train_random_indices)
 
-    dev_samples = shuffled_samples[NUM_TRAIN_EXAMPLES:] 
-    val_random_indices = indexed_train_list[NUM_TRAIN_EXAMPLES:]
+    # dev_samples = shuffled_samples[NUM_TRAIN_EXAMPLES:] 
+    # val_random_indices = indexed_train_list[NUM_TRAIN_EXAMPLES:]
     val_id2history, val_id2options, val_id2label_id = create_dicts_from_tuples(dev_samples, val_random_indices)
 
     test_samples = load_all_samples(base_dir, 'dev')
@@ -146,12 +151,16 @@ def main(config):
         # checkpoint = torch.load(save_name)
         model.load_state_dict(model_info['model_state_dict'])
         model = model.to(device)
-        preds, labels, avg_loss, metrics, grouped_data = evaluate_data(model, test_loader, config, device)
+        preds, labels, avg_loss, metrics, grouped_data, labeled_data = evaluate_data(model, test_loader, config, device)
 
         # save loss
         out_path = os.path.join(save_folder, "training_loss.png")
         plt.plot(avg_loss)
         plt.savefig(out_path)
+
+        # save pickles for confidence, variability and correctness
+        path_confidence_pickle = os.path.join(save_folder, f'labeled_data.pkl')
+        create_pickle(labeled_data, path_confidence_pickle)
 
         # save pickles for confidence, variability and correctness
         path_confidence_pickle = os.path.join(save_folder, f'confidence.pkl')

@@ -10,7 +10,7 @@ from data import load_all_samples
 from torch.utils.data import DataLoader
 import numpy as np
 import math
-from utils import calculate_true_label_probs, count_true_label_correct, RPF1, RPF1_binary
+from utils import calculate_true_label_probs, count_true_label_correct, RPF1, RPF1_binary, create_pickle
 
 def evaluate_data(model, data_loader, config, device):
     """
@@ -62,6 +62,8 @@ def evaluate_data(model, data_loader, config, device):
         preds = calculate_probs(preds) # torch tensor (num_val_examples, 2)
 
     grouped_data, labeled_data = group_data(sentence_ids, option_ids, preds, labels)
+
+
     sorted_data = sort_grouped_data(grouped_data)
     metrics = {}
     r_1, r_2, mrr = calculate_IR_metrics(sorted_data, labeled_data)
@@ -82,7 +84,7 @@ def evaluate_data(model, data_loader, config, device):
     avg_loss = total_loss / len(data_loader)
     model.train()
 
-    return preds, labels, avg_loss, metrics, grouped_data
+    return preds, labels, avg_loss, metrics, grouped_data, labeled_data
 
 def group_data(sentence_ids, option_ids, probabilities, labels):
     """
