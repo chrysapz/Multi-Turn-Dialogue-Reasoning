@@ -55,10 +55,11 @@ def main(config):
     print('Training')
     print_args(args)
     config = vars(args) # convert to dict
+    out_dir = config['out_dir']
     # config['sim']  = False
     # # config['repeat_type']= 'gold'
     # # config['debug'] = True
-    # out_dir = config['out_dir']
+    
     # config['augment'] = 'final_finetuned.pkl'
     # Set up the data directory and device
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
