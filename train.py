@@ -55,11 +55,11 @@ def main(config):
     print('Training')
     print_args(args)
     config = vars(args) # convert to dict
-    # config['sim']  =True
-    # config['repeat_type']= 'gold'
-    # config['debug'] = True
-    out_dir = config['out_dir']
-    # config['augment'] = 'finetuned.pkl'
+    # config['sim']  = False
+    # # config['repeat_type']= 'gold'
+    # # config['debug'] = True
+    # out_dir = config['out_dir']
+    # config['augment'] = 'final_finetuned.pkl'
     # Set up the data directory and device
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -81,16 +81,16 @@ def main(config):
     # Load training and val data
     initial_train_samples = load_all_samples(base_dir, 'train')
     # Read the serialized data from the file and deserialize it
-    indexed_train_list = load_pickle('index_list.pkl')
+    train_random_indices = load_pickle('random_ids.pkl')
+    val_random_indices = load_pickle('val_random_ids.pkl')
 
-    shuffled_samples = [initial_train_samples[i] for i in indexed_train_list]
-
-    train_samples = shuffled_samples[:NUM_TRAIN_EXAMPLES]
-    train_random_indices = indexed_train_list[:NUM_TRAIN_EXAMPLES]
+    train_samples = [initial_train_samples[i] for i in train_random_indices]
+    dev_samples = [initial_train_samples[i] for i in val_random_indices]
+    # train_samples = shuffled_samples[:NUM_TRAIN_EXAMPLES]
+    # train_random_indices = indexed_train_list[:NUM_TRAIN_EXAMPLES]
     train_id2history, train_id2options, train_id2label_id = create_dicts_from_tuples(train_samples, train_random_indices)
 
-    dev_samples = shuffled_samples[NUM_TRAIN_EXAMPLES:] 
-    val_random_indices = indexed_train_list[NUM_TRAIN_EXAMPLES:]
+    # val_random_indices = indexed_train_list[NUM_TRAIN_EXAMPLES:]
     val_id2history, val_id2options, val_id2label_id = create_dicts_from_tuples(dev_samples, val_random_indices)
 
     test_samples = load_all_samples(base_dir, 'dev')
@@ -209,6 +209,12 @@ def main(config):
         plt.plot(avg_loss)
         plt.savefig(out_path)
 
+        extra_name = ''
+        if config['sim']:
+            extra_name+= 'sim_'
+        if config['augment'] is not None:
+            extra_name += 'augment_'
+
         # save pickles for confidence, variability and correctness
         path_confidence_pickle = os.path.join(save_folder, f'confidence.pkl')
         create_pickle(confidence, path_confidence_pickle)
@@ -219,7 +225,7 @@ def main(config):
         path_correctness_pickle = os.path.join(save_folder, f'correctness.pkl')
         create_pickle(correctness, path_correctness_pickle)
 
-        path_probs_pickle = os.path.join(save_folder, f'dict_probs.pkl')
+        path_probs_pickle = os.path.join(save_folder, f'{extra_name}dict_probs.pkl')
         create_pickle(grouped_data, path_probs_pickle)
 
         json_name = os.path.join(save_folder,'config.json')
