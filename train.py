@@ -15,7 +15,7 @@ from evaluate import evaluate_data, calculate_probs, group_data, sort_grouped_da
 from time import gmtime, strftime
 from tqdm import tqdm
 from collections import defaultdict
-from utils import calculate_true_label_probs, repeat_golds_training_data, repeat_training_data_based_on_sim, add_augmented_as_gold, add_augmented_label_based_on_sim, load_pickle, count_true_label_correct, calculate_mean, calculate_variability, print_args, create_pickle, create_dicts_from_tuples
+from utils import calculate_true_label_probs, replace_label, repeat_golds_training_data, repeat_training_data_based_on_sim, add_augmented_as_gold, add_augmented_label_based_on_sim, load_pickle, count_true_label_correct, calculate_mean, calculate_variability, print_args, create_pickle, create_dicts_from_tuples
 import pandas as pd
 import argparse
 from similarities import calculate_similarities, get_sim_key
@@ -56,10 +56,12 @@ def main(config):
     print_args(args)
     config = vars(args) # convert to dict
     out_dir = config['out_dir']
+    
+    # config['replace'] = True
     # config['sim']  = False
     # config['debug'] = True
-    
     # config['augment'] = 'final_finetuned.pkl'
+
     # Set up the data directory and device
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -97,7 +99,7 @@ def main(config):
     test_indices = list(range(len(test_samples)))
     test_id2history, test_id2options, test_id2label_id = create_dicts_from_tuples(test_samples, test_indices)
 
-    if config['augment'] is not None:
+    if config['augment'] is not None and not config['replace']:
         pickle_path = os.path.join('generated_text',config['augment'])
         generated_info = load_pickle(pickle_path)
         print('add start remove new line')
@@ -136,6 +138,18 @@ def main(config):
             out_path = os.path.join(save_folder, new_pickle_name)
             create_pickle(new_generated_info, new_pickle_name)
         # train_id2history = create_dicts_from_tuples(train_samples, train_random_indices)
+
+    if config['replace']:
+        pickle_path = os.path.join('generated_text',config['augment'])
+        generated_info = load_pickle(pickle_path)
+        # REMOVE '\n', truncate last and remove whole empty
+        preprocessed_generated_info = preprocess_augmented_labels(generated_info)
+
+        ratios = length_statistics(tokenizer, preprocessed_generated_info)
+        # add 'm :' or f :' to generated
+        new_generated_info = add_start_to_augmented_labels(preprocessed_generated_info, train_id2options)
+
+        train_id2options = replace_label(train_id2options, train_id2label_id, new_generated_info)
 
     if config['debug']:
         train_k_ids = [2650, 2868]
@@ -278,6 +292,7 @@ def parse_option():
     # parser.add_argument('--repeat', type=int, default=0, help='default is not to repeat training data')
     parser.add_argument('--augment', type=str,default=None,
                          help='default is not to augment training data')
+    parser.add_argument('--replace', action='store_true',help='default is not to debug')
 
     # Parse the command-line arguments
     args = parser.parse_args()
