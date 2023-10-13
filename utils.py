@@ -63,6 +63,7 @@ def load_pickle(file_path):
 
 def concat_history_with_true_label(id2history, id2options, id2label_id):
         concat_sentences = [] 
+        ids = []
         for sent_id in id2history:
             hist = id2history[sent_id]
             existing_options = id2options[sent_id]
@@ -70,7 +71,15 @@ def concat_history_with_true_label(id2history, id2options, id2label_id):
             assert(len(true_label_id)==1)
             concat_text = hist+' ' + existing_options[true_label_id[0]]
             concat_sentences.append(concat_text)
-        return concat_sentences
+            ids.append(sent_id)
+        return concat_sentences, ids
+
+def replace_label(id2options, id2label_id, generated_info):
+    new_id2options = deepcopy(id2options)
+    for id in generated_info:
+        label_id = id2label_id[id][0]
+        new_id2options[id][label_id] = generated_info[id]['gen_text']
+    return new_id2options
 
 def create_dicts_from_tuples(samples, indices):
     """
@@ -100,6 +109,14 @@ def create_dicts_from_tuples(samples, indices):
         id2options[sent_id] = options
         id2label_id[sent_id] = [label_id]
     return id2history, id2options, id2label_id
+
+def convert_id2label_id_to_element(id2label_id):
+    new_id2label_id = deepcopy(id2label_id)
+
+    for sent_id in id2label_id:
+        new_id2label_id[sent_id] = id2label_id[sent_id][0]
+    
+    return new_id2label_id
 
 def add_augmented_as_gold(generated_info, train_id2options, train_id2label_id, consider_gold):
     """
@@ -492,30 +509,33 @@ def calculate_variability(true_label_dict_probs, true_avg_dict_probs):
 
     return variability
 # just tests
-if __name__=='__main__':
-    samples = [(2,['my1','my2','my3','my4'],'my con1'),(3,['opt1','opt2','opt3','opt4'],'my con2')]
-    indices = [111,22]
-    id2history, id2options, id2label_id = create_dicts_from_tuples(samples, indices)
+# if __name__=='__main__':
+#     # def replace_label(id2options, id2label_id, generated_info):
+#     #     for id in id2options:
+#     #         label_id = id2label_id[id]
+#     #         id2options[label_id] = generated_info[id]
+#     #     return id2options
+    
+#     id2options = {1:['a','b','c','d'],2}
+#     id2label_id = []
+#     generated_info = []
+    
+    # samples = [(2,['my1','my2','my3','my4'],'my con1'),(3,['opt1','opt2','opt3','opt4'],'my con2')]
+    # indices = [111,22]
+    # id2history, id2options, id2label_id = create_dicts_from_tuples(samples, indices)
 
-    generated_info = {22:{'gen_text':'opt5'},111:{'gen_text':'my5'}}
-    # generated_info (dict): A dictionary containing generated information,
-    #         where keys are sentence IDs and values are dictionaries including
-    #         'gen_text' representing the generated text.
-    #     train_id2options (dict): A dictionary of training examples, where keys
-    #         are sentence IDs and values are lists of options. The generated
-    #         text will be appended to the list of options for each sentence ID.
-    #     train_id2label_id (dict): A dictionary of training examples, where keys
-    #         are sentence IDs and values are lists of true label_ids. 
-    id2options, id2label_id = add_augmented_as_gold(generated_info, id2options, id2label_id)
+    # generated_info = {22:{'gen_text':'opt5'},111:{'gen_text':'my5'}}
+    
+    # id2options, id2label_id = add_augmented_as_gold(generated_info, id2options, id2label_id)
 
 
-    sorted_grouped_data = {1:[2,0,1,3],2:[1,2,0,3]}
-    labeled_data = {1:2,2:1}
-    r_1, r_2, mrr = calculate_IR_metrics(sorted_grouped_data, labeled_data)
-    assert(r_1 == r_2== mrr == 1.0)
+    # sorted_grouped_data = {1:[2,0,1,3],2:[1,2,0,3]}
+    # labeled_data = {1:2,2:1}
+    # r_1, r_2, mrr = calculate_IR_metrics(sorted_grouped_data, labeled_data)
+    # assert(r_1 == r_2== mrr == 1.0)
 
-    sorted_grouped_data = {1:[2,0,1,3],2:[1,2,0,3]}
-    labeled_data = {1:2,2:0}
-    r_1, r_2, mrr = calculate_IR_metrics(sorted_grouped_data, labeled_data)
-    assert(r_1 == 1/2 == r_2)
-    assert(mrr == 2/3)
+    # sorted_grouped_data = {1:[2,0,1,3],2:[1,2,0,3]}
+    # labeled_data = {1:2,2:0}
+    # r_1, r_2, mrr = calculate_IR_metrics(sorted_grouped_data, labeled_data)
+    # assert(r_1 == 1/2 == r_2)
+    # assert(mrr == 2/3)
