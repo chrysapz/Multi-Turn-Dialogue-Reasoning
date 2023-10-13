@@ -96,7 +96,7 @@ def train(model, train_loader, dev_loader, optimizer, config, device):
         epoch_loss.append(avg_train_loss)
         print(f"Epoch {epoch+1}/{epochs} | Training Loss: {avg_train_loss}")
 
-        eval_preds, eval_labels, eval_loss, metrics, grouped_data = evaluate_data(model, dev_loader, config, device)
+        eval_preds, eval_labels, eval_loss, metrics, grouped_data, labeled_data = evaluate_data(model, dev_loader, config, device)
         if metrics['r1'] > best_r1 or config['debug']:
             best_model = deepcopy(model)
             best_epoch = epoch
