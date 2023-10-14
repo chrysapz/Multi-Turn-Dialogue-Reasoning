@@ -116,7 +116,6 @@ def main(config):
             train_id2options, train_id2label_id, new_generated_info = add_augmented_label_based_on_sim(new_generated_info, train_id2options, train_id2label_id, avg_score)
             print('*'*12)
             print(f'number of new examples we are going to add: {len(new_generated_info)} ') # assume 1 per sent_id!
-            print('without cosine similarity we consider all generated augmented data as gold')
             new_pickle_name = 'sim_'+config['augment'] 
 
             create_pickle(new_generated_info, new_pickle_name)

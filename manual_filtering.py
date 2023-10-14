@@ -95,7 +95,6 @@ def preprocess_augmented_labels(generated_info):
         preprocessed_generated_info[sent_id]['gen_text'] = truncated_generated
     
     print(f'total empty generated responses we removed: {counter_empty}')
-    print(f'number of times we truncated the last sentence: {counter_truncate_last_sentence}')
     return preprocessed_generated_info
 
 def jaccard_similarity(list1, list2):
