@@ -23,7 +23,7 @@ from utils import calculate_true_label_probs, repeat_golds_training_data, repeat
 import pandas as pd
 import argparse
 from similarities import calculate_similarities, get_sim_key
-from manual_filtering import preprocess_augmented_labels, add_start_to_augmented_labels, length_statistics
+from manual_filtering import preprocess_augmented_labels, add_start_to_augmented_labels, data_statistics
 from trainer import train
 import time
 # # Decode the token IDs
@@ -83,7 +83,7 @@ def create_new_dialogues(id2t5input, all_generated_ids, tokenizer, sent_ids):
         hist, true_new_option = find_option_text(output_text)
         generated_id2history[dummy_id] = hist
         generated_id2options[dummy_id] = [true_new_option] # then repeat the ones from the initial
-        generated_id2label_id[dummy_id] = 0 # always put first position in the options label
+        generated_id2label_id[dummy_id] = [0] # always put first position in the options label
 
     return generated_id2history, generated_id2options, generated_id2label_id, dummy2initial
         # mask_id = 0
@@ -130,13 +130,14 @@ def add_existing_negative_options(generated_train_id2options, dummy2initial, tra
         new_generated_train_id2options[dummy_id].extend(negative_options)
     return new_generated_train_id2options
 
+from select_masks import create_dialogues
+
 def main(config):
     print('Training')
     print_args(args)
     config = vars(args) # convert to dict
-    # config['sim']  =True
-    # config['repeat_type']= 'gold'
     # config['debug'] = True
+    
     out_dir = config['out_dir']
     # config['augment'] = 'finetuned.pkl'
     # Set up the data directory and device
@@ -160,37 +161,27 @@ def main(config):
     # Load training and val data
     initial_train_samples = load_all_samples(base_dir, 'train')
     # Read the serialized data from the file and deserialize it
-    indexed_train_list = load_pickle('index_list.pkl')
 
-    shuffled_samples = [initial_train_samples[i] for i in indexed_train_list]
+    
+    train_random_indices = load_pickle('random_ids.pkl')
+    val_random_indices = load_pickle('val_random_ids.pkl')
 
-    train_samples = shuffled_samples[:NUM_TRAIN_EXAMPLES]
-    train_random_indices = indexed_train_list[:NUM_TRAIN_EXAMPLES]
+    train_samples = [initial_train_samples[i] for i in train_random_indices]
+    dev_samples = [initial_train_samples[i] for i in val_random_indices]
+
     train_id2history, train_id2options, train_id2label_id = create_dicts_from_tuples(train_samples, train_random_indices)
 
-    dev_samples = shuffled_samples[NUM_TRAIN_EXAMPLES:] 
-    val_random_indices = indexed_train_list[NUM_TRAIN_EXAMPLES:]
     val_id2history, val_id2options, val_id2label_id = create_dicts_from_tuples(dev_samples, val_random_indices)
 
     test_samples = load_all_samples(base_dir, 'dev')
     test_indices = list(range(len(test_samples)))
     test_id2history, test_id2options, test_id2label_id = create_dicts_from_tuples(test_samples, test_indices)
 
-    save_folder = 'dialogue_generated'
-    file = os.path.join(save_folder,'t5_generated1_1.pkl')
-    generated_texts = load_pickle(file)
+    config_2 = {'mode': 'binary', 'data_dir': 'data', 'out_dir': 'checkpoints', 'dataset_name': 'mutual', 'debug': False, 'model_name': 'google/t5-v1_1-xl', 'batch_size': 64, 'n_gram_start': 1, 'n_gram_finish': 1}
 
-    file = os.path.join(save_folder,'count_1_1.pkl')
-    count = load_pickle(file)
-
-    file = os.path.join(save_folder,'sent_id_1_1.pkl')
-    sent_ids = load_pickle(file)
-
-    file = os.path.join(save_folder,'id2t5_1_1.pkl')
-    id2t5 = load_pickle(file)
-
-    file = os.path.join(save_folder,'gen_ids_1_1.pkl')
-    generated_ids = load_pickle(file)
+    id2t5, keywords_samples, dicts, generated_ids, count_masks, sent_ids, generated_dialogues = create_dialogues(config_2)
+    # print('id2t5',id2t5[982])
+    # print('train_id2history',train_id2history[982])
 
     t5_tokenizer = T5Tokenizer.from_pretrained('google/t5-v1_1-xl')
 
@@ -203,6 +194,11 @@ def main(config):
     train_id2options.update(new_generated_train_id2options)
     train_id2label_id.update(generated_train_id2label_id)
     train_id2history.update(generated_train_id2history)
+
+    create_pickle(train_id2options,'train_options.pkl')
+    create_pickle(train_id2label_id,'train_id2labelid.pkl')
+    create_pickle(train_id2history,'train_id2history.pkl')
+    create_pickle(dummy2initial,'dummy.pkl')
 
     if config['debug']:
         train_k_ids = [2650, 2868]
@@ -269,7 +265,7 @@ def main(config):
         # checkpoint = torch.load(save_name)
         model.load_state_dict(model_info['model_state_dict'])
         model = model.to(device)
-        preds, labels, avg_loss, metrics, grouped_data = evaluate_data(model, test_loader, config, device)
+        preds, labels, avg_loss, metrics, grouped_data, labeled_data = evaluate_data(model, test_loader, config, device)
 
         # save loss
         out_path = os.path.join(save_folder, "training_loss.png")
@@ -330,9 +326,3 @@ def parse_option():
 if __name__ == "__main__":
     args = parse_option()
     main(args)
-
-
-
-if __name__=='__main__':
-    main()
-    a=1

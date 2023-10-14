@@ -23,7 +23,7 @@ def mask_based_on_keywords(sentence_transformer_model, list_sentences, n_gram_st
     kw_model = KeyBERT(model=sentence_model)
 
     # Define the step size for the loop
-    step_size = 64
+    step_size = 128
     all_key_phrases = [] 
     # Iterate through the list of sentences with a step size of 16
     for i in range(0, len(list_sentences), step_size):
@@ -127,18 +127,20 @@ def t5_inference(dataloader, model, tokenizer):
     
     return  all_sentence_ids, texts_generated_dialogues, generated_dialogues_ids
 
-def main(args):
+def create_dialogues(args):
     save_folder = 'dialogue_generated'
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
     # gen = os.path.join(save_folder,'t5_generated1_1.pkl')
     # t5 = load_pickle(gen)
 
-    config = vars(args) # convert to dict
-    config['debug'] = True
+    config = args#vars(args) # convert to dict
+    # config['debug'] = True
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
     initial_train_samples = load_all_samples(base_dir, 'train')
-    indexed_train_list = load_pickle('index_list.pkl')
+
+    indexed_train_list = load_pickle('random_ids.pkl')
+
     indexed_train_list=indexed_train_list[:6000] # don't care about validation
     shuffled_samples = [initial_train_samples[i] for i in indexed_train_list]
 
@@ -150,10 +152,10 @@ def main(args):
 
     id2history, id2options, id2label_id = create_dicts_from_tuples(llama_val_samples, llama_val_random_indices)
 
-    samples = concat_history_with_true_label(id2history, id2options, id2label_id)
+    samples, ids = concat_history_with_true_label(id2history, id2options, id2label_id)
 
     if config['debug']:
-        samples = samples[:6]
+        samples = samples[:120]
 
     #id2history correct dicts wrong difference between samples[0] and id2history[982]
     keywords = mask_based_on_keywords('all-distilroberta-v1', samples, config['n_gram_start'], config['n_gram_finish'])
@@ -162,18 +164,18 @@ def main(args):
     keywords_samples = list(zip(keywords, samples))
     create_pickle(keywords_samples, sent_path)
 
-    new_samples, count_masks, dicts = preprocess_for_T5(samples, keywords, list(id2history.keys()))
+    new_samples, count_masks, dicts = preprocess_for_T5(samples, keywords, ids)
 
     dict_path = 'id2t5_' +path_name
     create_pickle(dicts, dict_path)
     tokenizer = T5Tokenizer.from_pretrained(config['model_name'])
-
-    #!todo check the below example from hf by putting samples = ["The <extra_id_0> walks in <extra_id_1> park"] 
+    # print('inside select masks ',dicts[982])
+    
     # so that we can be sure that it gives the same result with the one below
 
     model = T5ForConditionalGeneration.from_pretrained(config['model_name'])
     collate_fn = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model, padding=True,max_length=256,pad_to_multiple_of=8)
-    dataset = Concat_Dataset(new_samples, id2history, tokenizer)
+    dataset = Concat_Dataset(new_samples, ids, tokenizer)
     data_loader = DataLoader(dataset, shuffle=False, batch_size=config['batch_size'], collate_fn=collate_fn)
 
     all_sentence_ids, generated_dialogues, generated_dialogues_ids = t5_inference(data_loader, model, tokenizer)
@@ -190,6 +192,8 @@ def main(args):
 
     gen_path = 't5_generated'+path_name
     create_pickle(generated_dialogues, gen_path)
+
+    return dicts, keywords_samples, dicts, generated_dialogues_ids, count_masks, all_sentence_ids, generated_dialogues
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description="My Argument Parser")
@@ -219,4 +223,4 @@ if __name__=='__main__':
         help="The finishing value for n-grams (default: 3)."
     )
     args = parser.parse_args()
-    main(args)
+    create_dialogues(args)
