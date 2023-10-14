@@ -19,7 +19,7 @@ from utils import calculate_true_label_probs, replace_label, repeat_golds_traini
 import pandas as pd
 import argparse
 from similarities import calculate_similarities, get_sim_key
-from manual_filtering import preprocess_augmented_labels, add_start_to_augmented_labels, length_statistics
+from manual_filtering import preprocess_augmented_labels, add_start_to_augmented_labels, data_statistics
 from trainer import train
 import time
 
@@ -57,11 +57,6 @@ def main(config):
     config = vars(args) # convert to dict
     out_dir = config['out_dir']
     
-    # config['replace'] = True
-    # config['sim']  = False
-    # config['debug'] = True
-    # config['augment'] = 'final_finetuned.pkl'
-
     # Set up the data directory and device
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -106,7 +101,7 @@ def main(config):
         # REMOVE '\n', truncate last and remove whole empty
         preprocessed_generated_info = preprocess_augmented_labels(generated_info)
 
-        ratios = length_statistics(tokenizer, preprocessed_generated_info)
+        ratios = data_statistics(tokenizer, preprocessed_generated_info)
         # add 'm :' or f :' to generated
         new_generated_info = add_start_to_augmented_labels(preprocessed_generated_info, train_id2options)
 
@@ -117,35 +112,29 @@ def main(config):
             sim_key = get_sim_key(model_name, metric)
             # add new key for every sentence about the similarity between the label and the generated
             new_generated_info, avg_score, std_score, _,_,_, _ = calculate_similarities(64, new_generated_info, model_name, metric)
-   
+
             train_id2options, train_id2label_id, new_generated_info = add_augmented_label_based_on_sim(new_generated_info, train_id2options, train_id2label_id, avg_score)
             print('*'*12)
             print(f'number of new examples we are going to add: {len(new_generated_info)} ') # assume 1 per sent_id!
             print('without cosine similarity we consider all generated augmented data as gold')
             new_pickle_name = 'sim_'+config['augment'] 
-            print(f'write pickle in the current path named {new_pickle_name}')
-            out_path = os.path.join(save_folder, new_pickle_name)
+
             create_pickle(new_generated_info, new_pickle_name)
-        # generated_info = preprocess_augmented_labels(generated_info, train_id2options)
-        # print('remove last sentence')
-        # generated_info = remove_last_sentence(generated_info)
+
         else:
             #! without sim filtering means that we consider everything as gold
             print('without cosine similarity we consider all generated augmented data as gold')
             train_id2options, train_id2label_id = add_augmented_as_gold(new_generated_info, train_id2options, train_id2label_id)
             new_pickle_name = 'manually_'+config['augment'] 
-            print(f'write pickle in the current path named {new_pickle_name}')
-            out_path = os.path.join(save_folder, new_pickle_name)
             create_pickle(new_generated_info, new_pickle_name)
-        # train_id2history = create_dicts_from_tuples(train_samples, train_random_indices)
 
-    if config['replace']:
+    if config['replace'] and config['augment'] is not None:
         pickle_path = os.path.join('generated_text',config['augment'])
         generated_info = load_pickle(pickle_path)
         # REMOVE '\n', truncate last and remove whole empty
         preprocessed_generated_info = preprocess_augmented_labels(generated_info)
 
-        ratios = length_statistics(tokenizer, preprocessed_generated_info)
+        ratios = data_statistics(tokenizer, preprocessed_generated_info)
         # add 'm :' or f :' to generated
         new_generated_info = add_start_to_augmented_labels(preprocessed_generated_info, train_id2options)
 
@@ -193,11 +182,9 @@ def main(config):
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
     #! they pass epsilon as an argument in their code. Maybe we can tune it at a later stage if our results deviate from theirs.
-    # Initialize the optimizer
 
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=config['learning_rate'], eps=config['adam_epsilon'])
-    # t_total = len(train_dataloader) * config['epochs']
-    # # scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=config['warmup_steps'], num_training_steps=t_total)
+
     # Train the model
     model_info, avg_loss, confidence, variability, correctness = train(model, train_loader, dev_loader, optimizer, config, device)
 
@@ -213,7 +200,6 @@ def main(config):
         print('Test...')
         model = AutoModelForSequenceClassification.from_pretrained(config['model_name'], num_labels = 2)
         # load the model we just trained
-        # checkpoint = torch.load(save_name)
         model.load_state_dict(model_info['model_state_dict'])
         model = model.to(device)
         preds, labels, avg_loss, metrics, grouped_data, labeled_data = evaluate_data(model, test_loader, config, device)
@@ -222,11 +208,8 @@ def main(config):
         path_confidence_pickle = os.path.join(save_folder, f'labeled_data.pkl')
         create_pickle(labeled_data, path_confidence_pickle)
 
-        # save loss
         out_path = os.path.join(save_folder, "training_loss.png")
-        plt.plot(avg_loss)
-        plt.savefig(out_path)
-
+       
         extra_name = ''
         if config['sim']:
             extra_name+= 'sim_'
@@ -235,13 +218,11 @@ def main(config):
 
         # save pickles for confidence, variability and correctness
         path_confidence_pickle = os.path.join(save_folder, f'confidence.pkl')
-        create_pickle(confidence, path_confidence_pickle)
 
         path_variability_pickle = os.path.join(save_folder, f'variability.pkl')
-        create_pickle(variability, path_variability_pickle)
 
         path_correctness_pickle = os.path.join(save_folder, f'correctness.pkl')
-        create_pickle(correctness, path_correctness_pickle)
+
 
         path_probs_pickle = os.path.join(save_folder, f'{extra_name}dict_probs.pkl')
         create_pickle(grouped_data, path_probs_pickle)

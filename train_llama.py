@@ -214,8 +214,6 @@ def main(args):
         model = AutoModelForCausalLM.from_pretrained(config['model_name'], token = MY_TOKEN, device_map="auto", **kwargs)
     else:
         print('We are in debug mode so we take only the first few sentences')
-        # shuffled_train_samples =  shuffled_train_samples[:10]
-        # shuffled_dev_samples =  shuffled_dev_samples[:10]
         config['batch_size'] = 2
         if config['bits']==8: 
             kwargs['load_in_8bit'] =True

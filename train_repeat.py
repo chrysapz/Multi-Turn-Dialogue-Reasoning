@@ -33,8 +33,8 @@ def main(config):
     config = vars(args) # convert to dict
 
     # config['sim']  =True
-    # config['repeat_pickle'] = None#'sim_inference.pkl' #os.path.join('pickles','sim_augment_inference.pkl')
-    # config['repeat_type']= 'gold'
+    #config['repeat_pickle'] = 'final_results/final_finetuned.pkl'#'sim_inference.pkl' #os.path.join('pickles','sim_augment_inference.pkl')
+    # config['repeat_type']= 'sim'
     # config['debug'] = True
     # Set up the data directory and device
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
@@ -63,14 +63,9 @@ def main(config):
     train_samples = [initial_train_samples[i] for i in train_random_indices]
     dev_samples = [initial_train_samples[i] for i in val_random_indices]
 
-    # shuffled_samples = [initial_train_samples[i] for i in indexed_train_list]
 
-    # train_samples = shuffled_samples[:NUM_TRAIN_EXAMPLES]
-    # train_random_indices = indexed_train_list[:NUM_TRAIN_EXAMPLES]
     train_id2history, train_id2options, train_id2label_id = create_dicts_from_tuples(train_samples, train_random_indices)
 
-    # dev_samples = shuffled_samples[NUM_TRAIN_EXAMPLES:] 
-    # val_random_indices = indexed_train_list[NUM_TRAIN_EXAMPLES:]
     val_id2history, val_id2options, val_id2label_id = create_dicts_from_tuples(dev_samples, val_random_indices)
 
     test_samples = load_all_samples(base_dir, 'dev')
@@ -82,7 +77,10 @@ def main(config):
         preprocessed_generated_info = load_pickle(config['repeat_pickle'])
 
         if config['repeat_type']=='sim':
+            
             train_id2options, train_id2label_id = repeat_training_data_based_on_sim(train_id2options, train_id2label_id, preprocessed_generated_info)
+
+        
         elif config['repeat_type']=='gold': # we consider everything as gold
             train_id2options, train_id2label_id = repeat_golds_training_data(train_id2options, train_id2label_id, preprocessed_generated_info)
 
