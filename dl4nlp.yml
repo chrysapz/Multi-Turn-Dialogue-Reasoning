@@ -1,0 +1,24 @@
+name: nlp_final_new
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - pip
+  - python
+  - pytorch
+  - pytorch-cuda
+  - pip:
+    - matplotlib
+    - nltk
+    - numpy
+    - pandas
+    - peft
+    - scikit-learn
+    - scipy
+    - sentence-transformers
+    - tokenizers
+    - torch
+    - torchvision
+    - transformers

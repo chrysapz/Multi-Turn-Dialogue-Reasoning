@@ -7,6 +7,10 @@ To enhance reasoning, datasets like MuTual emphasize complex reasoning challenge
 
 To obtain the data, execute git clone https://github.com/Nealcly/MuTual and place the data folder in the current directory.
 
+**Results**
+To print directly the results of the 2 tables, run python -u error_analysis.py 
+
+
 **RoBERTa Experiments**
 
 *RoBERTa binary classification baseline*\
@@ -26,7 +30,7 @@ python -u train_repeat.py --repeat_type sim --repeat_pickle sim_final_finetuned.
 
 **LLama**
 
-To run LLama, you need to follow the following steps:
+To request access for LLama, you need to follow the following steps:
 1. Request access from Meta: Visit the Meta AI website to request access to LLama at https://ai.meta.com/resources/models-and-libraries/llama-downloads/.
 
 2. Create a Hugging Face account: Go to the Hugging Face website and sign up for an account at https://huggingface.co/signup.
