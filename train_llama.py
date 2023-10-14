@@ -58,8 +58,6 @@ def generate_and_collect_info(trainer, dev_loader, tokenizer, device, lora_dict,
                 output_scores=True,
                 return_dict_in_generate=True,
                 top_p = lora_dict['top_p'])
-            #     temperature = 1
-            # )
 
             generated_tokens_ids = outputs_ids['sequences'] #(batch_size, input_length+max_new_tokens)
             generated_scores = outputs_ids['scores'] #it's a tuple of len max_new_tokens where each (batch_size, vocab_size)
@@ -180,17 +178,6 @@ def create_tokenizer(config, MY_TOKEN):
 def main(args):
     print_args(args)
     config = vars(args) # convert to dict
-    # config['debug'] = True
-    # #config['do_train'] = True
-    # config['bits'] =16
-    # config['use_context'] = True
-
-
-    # Read the serialized data from the file and deserialize it
-    # with open('index_list.pkl', 'rb') as file:
-    #     indexed_train_list = pickle.load(file)
-
-    # indexed_train_list=indexed_train_list[:6000]
 
     llama_eval_indices = load_pickle('eval_ids_llama.pkl') #4500 from 6k
     indexed_random_list = load_pickle('random_ids.pkl') #6k
@@ -199,8 +186,6 @@ def main(args):
     for id in indexed_random_list:
         if id not in llama_eval_indices:
             llama_train_indices.append(id)
-
-    # print(loaded_data) 
 
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
 
@@ -215,19 +200,6 @@ def main(args):
 
     shuffled_train_samples = [train_samples[i] for i in llama_train_indices]
     shuffled_dev_samples = [train_samples[i] for i in llama_eval_indices]
-    # shuffle data and take sublists
-    # indexed_train_list = [i for i in range(len(train_samples))]
-    # random.shuffle(indexed_train_list)
-    # shuffled_samples = [train_samples[i] for i in indexed_train_list]
-    # FINETUNE_SIZE = config['finetune_size']
-    # shuffled_train_samples = shuffled_samples[:FINETUNE_SIZE]
-    # shuffled_dev_samples = shuffled_samples[FINETUNE_SIZE:] 
-
-    # Save index_list to a binary file
-    # with open('index_list.pkl', 'wb') as file:
-    #     pickle.dump(indexed_train_list, file)
-
-    # quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
     kwargs = {} # different argument based on whether we use 4bits or 8bits
     optim = "paged_adamw_32bit" if config['bits'] ==4 and not config['debug'] else "adamw_torch" # default
@@ -285,7 +257,6 @@ def main(args):
     dict_info_for_path['loss'] = 'all' if config['use_context'] else 'labels' 
     dict_info_for_path['lr'] = config['learning_rate']
     dict_info_for_path['top_p'] = config['top_p']
-    # Create data collators for training and development
     
     if config['bits']==16:
         bf=True
@@ -321,9 +292,6 @@ def main(args):
         dict_info_for_path['train'] = 'not_finetuned'
     trainer.model.eval()
 
-    # pass the indices before shuffling
-    # dev_ids = indexed_train_list[FINETUNE_SIZE:]
-    # dev_for_generate = shuffled_samples[FINETUNE_SIZE:]
     dev_dataset = Llama_with_sent_ids_dataset(tokenizer, shuffled_dev_samples, do_generate=True,dev_ids= llama_eval_indices, use_context=config['use_context'])
     dev_collate_fn = LLama_DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
     dev_loader = DataLoader(dev_dataset, shuffle=False, batch_size=16, collate_fn=dev_collate_fn)

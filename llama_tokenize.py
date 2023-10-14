@@ -368,14 +368,3 @@ class Llama_with_sent_ids_dataset(Llama_dataset):
         without_dummy = self.without_dummy_flag[idx]
 
         return input_ids, attention_mask, label, sentence_id, without_dummy
-    
-# if __name__=='__main__':
-#     tokenizer = AutoTokenizer.from_pretrained('meta-llama/Llama-2-7b-chat-hf',token='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')
-#     #answer index (0-3), a list of answer options, and an article
-#     samples = [[1, ['a ','b'], 'first'], [1, ['c ','d'], 'second'] ]
-
-#     dataset  = Llama_with_sent_ids_dataset(tokenizer, samples, True, [8,10], True)
-#     dev_collate_fn = DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
-#     d= DataLoader(dataset, shuffle=False, batch_size=16, collate_fn=dev_collate_fn)
-#     for batch in d:
-#         a=1
