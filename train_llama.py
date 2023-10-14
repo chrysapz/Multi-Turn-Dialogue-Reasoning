@@ -347,7 +347,7 @@ def parse_option():
     parser.add_argument('--use_context', action='store_true',help='store_true default is false.')# store_false, store_true
     parser.add_argument('--do_train', action='store_true',help='default is doing only evaluation')
     # general info
-    parser.add_argument('--hf_token', type=str, default='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', help='You can get it from here https://huggingface.co/settings/tokens')
+    parser.add_argument('--hf_token', type=str, default='hf_token', help='You can get it from here https://huggingface.co/settings/tokens')
     parser.add_argument('--model_name', type=str, default='meta-llama/Llama-2-7b-chat-hf')
     parser.add_argument('--tokenizer_name', type=str, default='meta-llama/Llama-2-7b-chat-hf')
     parser.add_argument('--dataset_name', type=str, default='mutual')

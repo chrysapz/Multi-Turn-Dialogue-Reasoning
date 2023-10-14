@@ -98,27 +98,42 @@ def preprocess_augmented_labels(generated_info):
     print(f'number of times we truncated the last sentence: {counter_truncate_last_sentence}')
     return preprocessed_generated_info
 
-def length_statistics(tokenizer, generated_info):
+def jaccard_similarity(list1, list2):
+    set1 = set(list1)
+    set2 = set(list2)
+    intersection = len(set1.intersection(set2))
+    union = len(set1.union(set2))
+    similarity = intersection / union
+    return similarity
+
+def data_statistics(tokenizer, generated_info):
     ratios = [] 
     generated_lens = []
     labels_lens = []
+    subwords_overlap = []
     for sent_id in generated_info:
         current_generated_info = generated_info[sent_id]
         generated_text = current_generated_info['gen_text']
         true_label = current_generated_info['true_label']
 
-        generated_text_len = len(tokenizer.encode(generated_text,add_special_tokens=False))
-        true_label_len = len(tokenizer.encode(true_label,add_special_tokens=False))
+        gen_ids = tokenizer.encode(generated_text,add_special_tokens=False)
+        generated_text_len = len(gen_ids)
+
+        true_ids = tokenizer.encode(true_label,add_special_tokens=False)
+        true_label_len = len(true_ids)
+
+        jacc = jaccard_similarity(gen_ids, true_ids)
 
         tmp_ratio = generated_text_len / true_label_len
         ratios.append(tmp_ratio)
 
         generated_lens.append(generated_text_len)
         labels_lens.append(true_label_len)
+        subwords_overlap.append(jacc)
 
     print(f'generated text mean length {np.mean(generated_lens)} +- {np.std(generated_lens)}')
     print(f'label text mean length {np.mean(labels_lens)} +- {np.std(labels_lens)}')
-    print()
+    print(f'avg jaccard similarity', jacc)
 
     print('ratio = generated_text_length / true_label_length')
     print(f'ratio mean  {np.mean(ratios)} +- {np.std(ratios)}')
