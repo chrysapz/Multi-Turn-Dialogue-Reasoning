@@ -363,10 +363,6 @@ def RPF1(grouped_data, labeled_data):
     recall = TP / (TP + FN) if TP + FN > 0 else 0  
     f1 = 2 * (precision * recall) / (precision + recall) if precision + recall > 0 else 0         
     
-    print("sentence Precision:", precision)
-    print("sentence Recall:", recall)
-    print("sentence F1 Score:", f1)
-
     return precision, recall, f1
 
 

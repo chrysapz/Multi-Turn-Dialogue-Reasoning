@@ -3,12 +3,17 @@
 
 To enhance reasoning, datasets like MuTual emphasize complex reasoning challenges. Our approach incorporates generative models like Llama 2 to create synthetic labels, with the aim of evaluating their impact on dialogue system performance.
 
+**Environment**
+
+To create the environment run: conda env create -f dl4nlp.yml
+
 **Data**
 
-To obtain the data, execute git clone https://github.com/Nealcly/MuTual and place the data folder in the current directory.
+To obtain the data, execute: git clone https://github.com/Nealcly/MuTual and place the data folder in the current directory.
 
-**Results**
-To print directly the results of the 2 tables, run python -u error_analysis.py 
+**Reported Results** 
+
+To directly print the reported results of the two tables, execute the following command: python -u error_analysis.py
 
 
 **RoBERTa Experiments**
@@ -39,7 +44,11 @@ To request access for LLama, you need to follow the following steps:
 
 4. Create your own Hugging Face API token: After requesting access to the LLama model, you will need to create your own Hugging Face API token. Follow the instructions provided by Hugging Face to generate your token.
 
-Then run:
+After activating the environment you should run:
+
+pip install accelerate bitsandbytes
+
+Then execute the following command: \
 python -u train_llama.py --do_train --use_context --bits 8 --top_p 0.95 --hf_token ADD_YOUR_TOKEN_HERE
 
 
