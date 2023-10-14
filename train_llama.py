@@ -6,7 +6,7 @@ from transformers import BitsAndBytesConfig, AutoTokenizer, \
 from peft import (LoraConfig, TaskType, get_peft_model,
                   prepare_model_for_int8_training)
 from torch.utils.data import DataLoader
-from utils import set_seed, print_args
+from utils import set_seed, print_args, load_pickle
 from data import load_all_samples
 import matplotlib.pyplot as plt
 from llama_tokenize import Llama_dataset, Llama_with_sent_ids_dataset, Llama_next_word_dataset
@@ -181,16 +181,25 @@ def main(args):
     print_args(args)
     config = vars(args) # convert to dict
     # config['debug'] = True
-    # config['do_train'] = True
+    # #config['do_train'] = True
     # config['bits'] =16
     # config['use_context'] = True
 
 
     # Read the serialized data from the file and deserialize it
-    with open('index_list.pkl', 'rb') as file:
-        indexed_train_list = pickle.load(file)
+    # with open('index_list.pkl', 'rb') as file:
+    #     indexed_train_list = pickle.load(file)
 
-    indexed_train_list=indexed_train_list[:6000]
+    # indexed_train_list=indexed_train_list[:6000]
+
+    llama_eval_indices = load_pickle('eval_ids_llama.pkl') #4500 from 6k
+    indexed_random_list = load_pickle('random_ids.pkl') #6k
+
+    llama_train_indices = [] #1500
+    for id in indexed_random_list:
+        if id not in llama_eval_indices:
+            llama_train_indices.append(id)
+
     # print(loaded_data) 
 
     base_dir = os.path.join(config['data_dir'], config['dataset_name'])
@@ -204,13 +213,15 @@ def main(args):
 
     tokenizer = create_tokenizer(config, MY_TOKEN)
 
+    shuffled_train_samples = [train_samples[i] for i in llama_train_indices]
+    shuffled_dev_samples = [train_samples[i] for i in llama_eval_indices]
     # shuffle data and take sublists
     # indexed_train_list = [i for i in range(len(train_samples))]
     # random.shuffle(indexed_train_list)
-    shuffled_samples = [train_samples[i] for i in indexed_train_list]
-    FINETUNE_SIZE = config['finetune_size']
-    shuffled_train_samples = shuffled_samples[:FINETUNE_SIZE]
-    shuffled_dev_samples = shuffled_samples[FINETUNE_SIZE:] 
+    # shuffled_samples = [train_samples[i] for i in indexed_train_list]
+    # FINETUNE_SIZE = config['finetune_size']
+    # shuffled_train_samples = shuffled_samples[:FINETUNE_SIZE]
+    # shuffled_dev_samples = shuffled_samples[FINETUNE_SIZE:] 
 
     # Save index_list to a binary file
     # with open('index_list.pkl', 'wb') as file:
@@ -231,8 +242,8 @@ def main(args):
         model = AutoModelForCausalLM.from_pretrained(config['model_name'], token = MY_TOKEN, device_map="auto", **kwargs)
     else:
         print('We are in debug mode so we take only the first few sentences')
-        shuffled_train_samples =  shuffled_train_samples[:10]
-        shuffled_dev_samples =  shuffled_dev_samples[:10]
+        # shuffled_train_samples =  shuffled_train_samples[:10]
+        # shuffled_dev_samples =  shuffled_dev_samples[:10]
         config['batch_size'] = 2
         if config['bits']==8: 
             kwargs['load_in_8bit'] =True
@@ -311,9 +322,9 @@ def main(args):
     trainer.model.eval()
 
     # pass the indices before shuffling
-    dev_ids = indexed_train_list[FINETUNE_SIZE:]
-    dev_for_generate = shuffled_samples[FINETUNE_SIZE:]
-    dev_dataset = Llama_with_sent_ids_dataset(tokenizer, dev_for_generate, do_generate=True,dev_ids= dev_ids, use_context=config['use_context'])
+    # dev_ids = indexed_train_list[FINETUNE_SIZE:]
+    # dev_for_generate = shuffled_samples[FINETUNE_SIZE:]
+    dev_dataset = Llama_with_sent_ids_dataset(tokenizer, shuffled_dev_samples, do_generate=True,dev_ids= llama_eval_indices, use_context=config['use_context'])
     dev_collate_fn = LLama_DataCollatorForLanguageModeling(tokenizer=tokenizer, pad_to_multiple_of=8, mlm=False)
     dev_loader = DataLoader(dev_dataset, shuffle=False, batch_size=16, collate_fn=dev_collate_fn)
 
